@@ -1,0 +1,34 @@
+ware_ops_pipes.pipelines
+========================
+
+.. py:module:: ware_ops_pipes.pipelines
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/ware_ops_pipes/pipelines/base_component/index
+   /autoapi/ware_ops_pipes/pipelines/configured_components/index
+   /autoapi/ware_ops_pipes/pipelines/io_helpers/index
+   /autoapi/ware_ops_pipes/pipelines/pipeline_params/index
+   /autoapi/ware_ops_pipes/pipelines/pipelines_utils/index
+   /autoapi/ware_ops_pipes/pipelines/resolve_algo_class_names/index
+   /autoapi/ware_ops_pipes/pipelines/templates/index
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.print_tree
+
+
+Package Contents
+----------------
+
+.. py:function:: print_tree(task, indent='', last=True)
+

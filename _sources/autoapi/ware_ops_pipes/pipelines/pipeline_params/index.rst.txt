@@ -1,0 +1,78 @@
+ware_ops_pipes.pipelines.pipeline_params
+========================================
+
+.. py:module:: ware_ops_pipes.pipelines.pipeline_params
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.pipeline_params.PipelineParams
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.pipeline_params.get_pipeline_params
+   ware_ops_pipes.pipelines.pipeline_params.set_pipeline_params
+
+
+Module Contents
+---------------
+
+.. py:class:: PipelineParams
+
+   .. py:attribute:: output_folder
+      :type:  str
+
+
+   .. py:attribute:: seed
+      :type:  int
+      :value: 42
+
+
+
+   .. py:attribute:: time_limit_sec
+      :type:  int | None
+      :value: None
+
+
+
+   .. py:attribute:: gen_tour
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: instance_set_name
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: instance_name
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: instance_path
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: domain_path
+      :type:  str | None
+      :value: None
+
+
+
+.. py:function:: get_pipeline_params() -> PipelineParams
+
+.. py:function:: set_pipeline_params(instance_set_name, instance_name, instance_path, output_folder, domain_path, time_limit_seconds=None, gen_tour=False) -> None
+

@@ -1,0 +1,30 @@
+ware_ops_pipes
+==============
+
+.. py:module:: ware_ops_pipes
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/ware_ops_pipes/pipelines/index
+   /autoapi/ware_ops_pipes/ranking/index
+   /autoapi/ware_ops_pipes/synthesis/index
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.print_tree
+
+
+Package Contents
+----------------
+
+.. py:function:: print_tree(task, indent='', last=True)
+

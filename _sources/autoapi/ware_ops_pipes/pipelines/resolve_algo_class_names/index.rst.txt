@@ -1,0 +1,19 @@
+ware_ops_pipes.pipelines.resolve_algo_class_names
+=================================================
+
+.. py:module:: ware_ops_pipes.pipelines.resolve_algo_class_names
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.resolve_algo_class_names.resolve_algorithm_class
+
+
+Module Contents
+---------------
+
+.. py:function:: resolve_algorithm_class(class_name: str) -> type
+

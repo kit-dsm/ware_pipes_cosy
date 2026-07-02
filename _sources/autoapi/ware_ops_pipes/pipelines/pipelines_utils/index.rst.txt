@@ -1,0 +1,19 @@
+ware_ops_pipes.pipelines.pipelines_utils
+========================================
+
+.. py:module:: ware_ops_pipes.pipelines.pipelines_utils
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.pipelines_utils.print_tree
+
+
+Module Contents
+---------------
+
+.. py:function:: print_tree(task, indent='', last=True)
+

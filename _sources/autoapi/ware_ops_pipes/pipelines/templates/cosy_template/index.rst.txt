@@ -1,0 +1,401 @@
+ware_ops_pipes.pipelines.templates.cosy_template
+================================================
+
+.. py:module:: ware_ops_pipes.pipelines.templates.cosy_template
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.templates.cosy_template.BaseComponent
+   ware_ops_pipes.pipelines.templates.cosy_template.InstanceLoader
+   ware_ops_pipes.pipelines.templates.cosy_template.AbstractItemAssignment
+   ware_ops_pipes.pipelines.templates.cosy_template.AbstractBatching
+   ware_ops_pipes.pipelines.templates.cosy_template.SingleOrderBatching
+   ware_ops_pipes.pipelines.templates.cosy_template.MultiOrderBatching
+   ware_ops_pipes.pipelines.templates.cosy_template.AbstractPickerRouting
+   ware_ops_pipes.pipelines.templates.cosy_template.PickerRouting
+   ware_ops_pipes.pipelines.templates.cosy_template.CombinedIAR
+   ware_ops_pipes.pipelines.templates.cosy_template.CombinedBR
+   ware_ops_pipes.pipelines.templates.cosy_template.AbstractScheduling
+   ware_ops_pipes.pipelines.templates.cosy_template.AbstractResultAggregation
+   ware_ops_pipes.pipelines.templates.cosy_template.ResultAggregationDistance
+   ware_ops_pipes.pipelines.templates.cosy_template.ResultAggregationDueDate
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.pipelines.templates.cosy_template.class_fingerprint_payload
+   ware_ops_pipes.pipelines.templates.cosy_template.traverse_pipeline
+   ware_ops_pipes.pipelines.templates.cosy_template.check_unique
+   ware_ops_pipes.pipelines.templates.cosy_template.configured_routing_constraint
+
+
+Module Contents
+---------------
+
+.. py:function:: class_fingerprint_payload(cls) -> dict
+
+.. py:class:: BaseComponent(*args, **kwargs)
+
+   Bases: :py:obj:`cosy_luigi.CoSyLuigiTask`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: algo_cls
+      :value: None
+
+
+
+   .. py:attribute:: pipeline_params
+
+
+   .. py:method:: config_fingerprint_payload() -> dict
+
+      Semantic configuration of this component.
+
+      Override this only for configured components, for example:
+      LocalSearchBatching with a specific seed heuristic, routing evaluator,
+      neighborhood, random seed, or iteration limit.
+
+      Do not include upstream inputs here. Upstream dependencies are handled
+      by chain_fingerprint().
+
+
+
+   .. py:method:: algo_fingerprint() -> str
+
+      Fingerprint of the base algorithm implementation.
+
+      This answers: did the implementation class itself change?
+
+
+
+   .. py:method:: own_fingerprint() -> str
+
+      Fingerprint of this configured component.
+
+      For a plain algorithm task:
+          own_fingerprint == fingerprint(algo_cls)
+
+      For a configured algorithm task:
+          own_fingerprint == hash(fingerprint(algo_cls), config)
+
+      For non-algorithm tasks:
+          own_fingerprint == hash(task class, config)
+
+
+
+   .. py:method:: chain_fingerprint() -> str
+
+      Fingerprint of this stage plus all upstream stages.
+
+      If an upstream algorithm changes, all downstream output paths change too.
+
+
+
+   .. py:method:: task_path_key() -> str
+
+      Human-readable configured component key.
+
+      Use the concrete task class name rather than algo_cls.__name__ because
+      different configured variants may wrap the same base algorithm class.
+
+
+
+   .. py:method:: get_luigi_local_target_with_task_id(out_name: str) -> luigi.LocalTarget
+
+
+   .. py:method:: ensure_output_dirs() -> None
+
+
+   .. py:method:: dump_output_pickle(output_key: str, obj) -> None
+
+
+   .. py:method:: dump_output_json(output_key: str, obj) -> None
+
+
+.. py:class:: InstanceLoader(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:method:: output()
+
+
+   .. py:method:: run()
+
+
+.. py:class:: AbstractItemAssignment(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: instance
+
+
+   .. py:method:: get_inited_item_assigner() -> ware_ops_algos.algorithms.ItemAssignment
+
+
+   .. py:method:: output()
+
+
+   .. py:method:: run()
+
+
+.. py:class:: AbstractBatching(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: instance
+
+
+   .. py:attribute:: item_assignment_sol
+
+
+   .. py:method:: output()
+
+
+.. py:class:: SingleOrderBatching(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractBatching`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:method:: run()
+
+
+.. py:class:: MultiOrderBatching(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractBatching`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:method:: get_inited_batcher() -> ware_ops_algos.algorithms.Batching
+
+
+   .. py:method:: run()
+
+
+.. py:class:: AbstractPickerRouting(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: instance
+
+
+   .. py:method:: output()
+
+
+.. py:class:: PickerRouting(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractPickerRouting`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: batching_sol
+
+
+   .. py:method:: run()
+
+
+.. py:class:: CombinedIAR(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractPickerRouting`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:method:: run()
+
+
+.. py:class:: CombinedBR(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractPickerRouting`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: item_assignment_sol
+
+
+   .. py:method:: run()
+
+
+.. py:class:: AbstractScheduling(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: instance
+
+
+   .. py:attribute:: routing_sol
+
+
+   .. py:method:: output()
+
+
+   .. py:method:: run()
+
+
+.. py:class:: AbstractResultAggregation(*args, **kwargs)
+
+   Bases: :py:obj:`BaseComponent`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:method:: output()
+
+
+   .. py:method:: configure(data_card: ware_ops_algos.domain_models.DataCard, models: list[ware_ops_algos.algorithms.algorithm_cards.AlgorithmCard])
+      :classmethod:
+
+
+
+   .. py:method:: constraints() -> Sequence[Callable[Ellipsis, bool]]
+      :classmethod:
+
+
+
+.. py:class:: ResultAggregationDistance(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractResultAggregation`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: routing_sol
+
+
+   .. py:method:: run()
+
+
+.. py:class:: ResultAggregationDueDate(*args, **kwargs)
+
+   Bases: :py:obj:`AbstractResultAggregation`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: instance
+
+
+   .. py:attribute:: scheduling_sol
+
+
+   .. py:method:: run()
+
+
+.. py:function:: traverse_pipeline(vs: Iterable[cosy_luigi.CoSyLuigiTask], visited=None) -> list[cosy_luigi.CoSyLuigiTask]
+
+.. py:function:: check_unique(vs: Mapping[str, cosy_luigi.CoSyLuigiTask], required_to_be_unique: Iterable[type[cosy_luigi.CoSyLuigiTask]], get_classes=None) -> bool
+
+.. py:function:: configured_routing_constraint(vs, get_classes=None) -> bool
+
