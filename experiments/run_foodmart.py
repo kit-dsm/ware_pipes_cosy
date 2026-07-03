@@ -20,6 +20,8 @@ class FoodmartRunner(PipelineRunner):
         for filepath in self.instances_dir.glob("*.txt"):
             if filepath.is_file():
                 instances.append((filepath.stem, [filepath]))
+                if len(instances) == 100:
+                    break
         return instances
 
     def load_domain(self, instance_name: str, file_paths: list[Path]) -> BaseWarehouseDomain:
