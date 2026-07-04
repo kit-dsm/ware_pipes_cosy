@@ -72,7 +72,6 @@ jobs:
               {"set": "HennWaescherClassBased", "runner": "hessler"},
 
               {"set": "KrisSmallDataCorrected", "runner": "ibrsp"},
-#              {"set": "KrisLargeData", "runner": "ibrsp"},
           ]
 
           test_sets = [
