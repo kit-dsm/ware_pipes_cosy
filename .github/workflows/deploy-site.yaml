@@ -1,0 +1,54 @@
+name: deploy-benchmark-site-only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: benchmark-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy-site:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore latest benchmark website data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p tmp_benchmark_results/download tmp_benchmark_results/extracted
+
+          gh release download benchmark-results \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "benchmark-results.tar.gz" \
+            --dir tmp_benchmark_results/download \
+            --clobber
+
+          tar xzf tmp_benchmark_results/download/benchmark-results.tar.gz \
+            -C tmp_benchmark_results/extracted
+
+          rm -rf experiments/evaluation/website/site/data
+          mkdir -p experiments/evaluation/website/site/data
+
+          cp -r tmp_benchmark_results/extracted/data/data/. \
+            experiments/evaluation/website/site/data/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: experiments/evaluation/website/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
