@@ -304,6 +304,7 @@ class PipelineRunner(ABC):
         from ware_ops_pipes.pipelines.templates.cosy_template import (
             InstanceLoader,
             ResultAggregationDistance,
+            ResultAggregationDueDate
         )
 
         model_classes = []
@@ -321,13 +322,19 @@ class PipelineRunner(ABC):
             model_classes.append(cls)
             seen.add(cls)
 
+        endpoint = ResultAggregationDueDate
+
+        problem = self.data_card.problem_class
+        if "scheduling" in TAXONOMY[problem]["variables"]:
+            endpoint = ResultAggregationDueDate
+
         repo_classes = [
             LayoutLoader,
             InstanceLoader,
             AlgorithmRunConfig,
             SingleOrderBatching,
             *model_classes,
-            ResultAggregationDistance,
+            ResultAggregationDueDate
         ]
 
         if self.verbose:
@@ -335,14 +342,13 @@ class PipelineRunner(ABC):
             for cls in repo_classes:
                 print(f"  - {cls.__name__}")
 
-        endpoint = ResultAggregationDistance
 
         # endpoint.configure(self.data_card, final_algos)
 
         repo = CoSyLuigiRepo(*repo_classes)
         maestro = Maestro(repo.cls_repo, repo.taxonomy)
 
-        query = maestro.query(endpoint.target())
+        query = maestro.query(endpoint.target(), None)
 
         if self.max_pipelines is None or self.max_pipelines <= 0:
             pipelines = list(query)
