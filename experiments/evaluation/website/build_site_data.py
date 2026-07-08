@@ -196,7 +196,15 @@ def add_metric_gaps(df: pd.DataFrame) -> pd.DataFrame:
         if metric not in df.columns:
             continue
 
+        gap_col = f"{metric}_gap_pct"
+        best_col = f"{metric}_is_best"
+
+        df[gap_col] = np.nan
+        df[best_col] = False
+
+        df[metric] = pd.to_numeric(df[metric], errors="coerce")
         valid = df[metric].notna()
+
         if not valid.any():
             continue
 
@@ -214,8 +222,8 @@ def add_metric_gaps(df: pd.DataFrame) -> pd.DataFrame:
             gap = ((best - df.loc[valid, metric]) / best.abs().clip(lower=1e-9)) * 100.0
             is_best = df.loc[valid, metric].eq(best)
 
-        df.loc[valid, f"{metric}_gap_pct"] = gap.clip(lower=0.0)
-        df.loc[valid, f"{metric}_is_best"] = is_best
+        df.loc[valid, gap_col] = gap.clip(lower=0.0)
+        df.loc[valid, best_col] = is_best
 
     return df
 
