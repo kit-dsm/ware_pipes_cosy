@@ -23,7 +23,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore latest benchmark website data
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install project
+        run: |
+          uv sync --extra eval
+
+      - name: Restore latest benchmark dataframe
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -38,11 +50,15 @@ jobs:
           tar xzf tmp_benchmark_results/download/benchmark-results.tar.gz \
             -C tmp_benchmark_results/extracted
 
-          rm -rf experiments/evaluation/website/site/data
-          mkdir -p experiments/evaluation/website/site/data
+          mkdir -p experiments/evaluation
 
-          cp -r tmp_benchmark_results/extracted/data/data/. \
-            experiments/evaluation/website/site/data/
+          cp tmp_benchmark_results/extracted/df_results.pkl \
+            experiments/evaluation/df_results.pkl
+
+      - name: Rebuild benchmark website data
+        run: |
+          rm -rf experiments/evaluation/website/site/data
+          uv run python experiments/evaluation/website/build_site_data.py
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
