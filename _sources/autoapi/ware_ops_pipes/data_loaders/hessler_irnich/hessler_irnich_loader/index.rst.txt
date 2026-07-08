@@ -1,0 +1,48 @@
+ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_loader
+================================================================
+
+.. py:module:: ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_loader
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_loader.HesslerIrnichLoader
+
+
+Module Contents
+---------------
+
+.. py:class:: HesslerIrnichLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None, mirror_top_depot: bool = True)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:attribute:: mirror_top_depot
+      :value: True
+
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> Dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: Dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: Dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: Dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+

@@ -1,0 +1,62 @@
+ware_ops_pipes.data_loaders.foodmart
+====================================
+
+.. py:module:: ware_ops_pipes.data_loaders.foodmart
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/ware_ops_pipes/data_loaders/foodmart/foodmart_loader/index
+   /autoapi/ware_ops_pipes/data_loaders/foodmart/foodmart_results_loader/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.foodmart.FoodmartLoader
+   ware_ops_pipes.data_loaders.foodmart.FoodmartResultsLoader
+
+
+Package Contents
+----------------
+
+.. py:class:: FoodmartLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> Dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: Dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: Dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: Dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+.. py:class:: FoodmartResultsLoader
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   .. py:method:: load(instance_set: str) -> pandas.DataFrame
+
+

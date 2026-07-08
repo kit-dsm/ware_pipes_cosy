@@ -1,0 +1,52 @@
+ware_ops_pipes.synthesis.pipeline_provenance
+============================================
+
+.. py:module:: ware_ops_pipes.synthesis.pipeline_provenance
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.synthesis.pipeline_provenance.collect_from_graph
+
+
+Module Contents
+---------------
+
+.. py:function:: collect_from_graph(task) -> dict[str, dict]
+
+   Walk the task DAG depth-first and collect solutions + provenance.
+
+   Returns a dict keyed by stage name, for example:
+
+       {
+           "item_assignment": {
+               "stage": "item_assignment",
+               "task_class": "GreedyIA",
+               "algo": "GreedyItemAssignment",
+               "time": 0.003,
+               "solution": <ItemAssignmentSolution>,
+               "target_path": ".../item_assignment_sol.pkl",
+               "algo_fingerprint": "...",
+               "own_fingerprint": "...",
+               "chain_fingerprint": "...",
+               "config": None,
+           },
+           "batching": { ... },
+           "routing":  { ... },
+       }
+
+   Fingerprint semantics:
+
+       algo_fingerprint:
+           fingerprint of the base algorithm implementation
+
+       own_fingerprint:
+           fingerprint of the configured component itself
+
+       chain_fingerprint:
+           fingerprint of this component plus all upstream components
+
+

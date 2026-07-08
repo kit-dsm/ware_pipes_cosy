@@ -1,0 +1,31 @@
+ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_results_loader
+========================================================================
+
+.. py:module:: ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_results_loader
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.hessler_irnich.hessler_irnich_results_loader.HesslerIrnichResultsLoader
+
+
+Module Contents
+---------------
+
+.. py:class:: HesslerIrnichResultsLoader
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   Loads literature benchmark results
+
+
+   .. py:method:: load(instance_set: str | pathlib.Path) -> pandas.DataFrame
+
+      Load results for instance set
+
+
+

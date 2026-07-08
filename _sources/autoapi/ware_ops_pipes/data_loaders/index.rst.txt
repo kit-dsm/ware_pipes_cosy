@@ -1,0 +1,138 @@
+ware_ops_pipes.data_loaders
+===========================
+
+.. py:module:: ware_ops_pipes.data_loaders
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/ware_ops_pipes/data_loaders/foodmart/index
+   /autoapi/ware_ops_pipes/data_loaders/generators/index
+   /autoapi/ware_ops_pipes/data_loaders/hessler_irnich/index
+   /autoapi/ware_ops_pipes/data_loaders/ibrsp/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.HesslerIrnichLoader
+   ware_ops_pipes.data_loaders.HesslerIrnichResultsLoader
+   ware_ops_pipes.data_loaders.FoodmartLoader
+   ware_ops_pipes.data_loaders.FoodmartResultsLoader
+   ware_ops_pipes.data_loaders.IBRSPLoader
+
+
+Package Contents
+----------------
+
+.. py:class:: HesslerIrnichLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None, mirror_top_depot: bool = True)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:attribute:: mirror_top_depot
+      :value: True
+
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> Dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: Dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: Dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: Dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+.. py:class:: HesslerIrnichResultsLoader
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   Loads literature benchmark results
+
+
+   .. py:method:: load(instance_set: str | pathlib.Path) -> pandas.DataFrame
+
+      Load results for instance set
+
+
+
+.. py:class:: FoodmartLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> Dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: Dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: Dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: Dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.base_domain.BaseWarehouseDomain
+
+
+.. py:class:: FoodmartResultsLoader
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   .. py:method:: load(instance_set: str) -> pandas.DataFrame
+
+
+.. py:class:: IBRSPLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.BaseWarehouseDomain
+
+

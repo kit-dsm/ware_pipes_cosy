@@ -1,0 +1,25 @@
+ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader
+============================================================
+
+.. py:module:: ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader.FoodmartResultsLoader
+
+
+Module Contents
+---------------
+
+.. py:class:: FoodmartResultsLoader
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.base_data_loader.DataLoader`
+
+
+   .. py:method:: load(instance_set: str) -> pandas.DataFrame
+
+

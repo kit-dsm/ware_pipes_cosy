@@ -1,0 +1,52 @@
+ware_ops_pipes.data_loaders.ibrsp
+=================================
+
+.. py:module:: ware_ops_pipes.data_loaders.ibrsp
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/ware_ops_pipes/data_loaders/ibrsp/ibrsp_loader/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.ibrsp.IBRSPLoader
+
+
+Package Contents
+----------------
+
+.. py:class:: IBRSPLoader(instances_dir: str | pathlib.Path, cache_dir: str | pathlib.Path | None = None)
+
+   Bases: :py:obj:`ware_ops_algos.data_loaders.DataLoader`
+
+
+   .. py:attribute:: cache_dir
+
+
+   .. py:method:: pipeline_loader_kwargs() -> dict
+
+
+   .. py:method:: load(filepath: str | pathlib.Path, use_cache: bool = False) -> ware_ops_algos.domain_models.BaseWarehouseDomain
+
+
+   .. py:method:: parse_instance(filepath: str | pathlib.Path) -> dict[str, Any]
+
+
+   .. py:method:: layout_signature(parsed: dict[str, Any]) -> dict
+
+
+   .. py:method:: build_layout(parsed: dict[str, Any]) -> ware_ops_algos.domain_models.LayoutData
+
+
+   .. py:method:: build_domain_with_layout(parsed: dict[str, Any], layout: ware_ops_algos.domain_models.LayoutData) -> ware_ops_algos.domain_models.BaseWarehouseDomain
+
+
