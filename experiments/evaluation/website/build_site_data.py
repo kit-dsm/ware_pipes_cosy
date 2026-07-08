@@ -7,21 +7,12 @@ import numpy as np
 import pandas as pd
 
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 EVALUATION_DIR = SCRIPT_DIR.parent
 
 DF_RESULTS_PATH = EVALUATION_DIR / "df_results.pkl"
-SITE_DIR = SCRIPT_DIR / "site"
-SITE_DATA_DIR = SITE_DIR / "data"
+SITE_DATA_DIR = SCRIPT_DIR / "site" / "data"
 
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
 STAGES = [
     "item_assignment",
@@ -30,30 +21,21 @@ STAGES = [
     "scheduling",
 ]
 
-METRIC_COLS = [
-    "total_distance",
-    "total_cpu_time",
-    "makespan",
-    "on_time_rate",
-    "max_tardiness",
-    "avg_tardiness",
-    "avg_lateness",
-    "max_lateness",
-]
+METRICS = {
+    "total_distance": "min",
+    "total_cpu_time": "min",
+    "makespan": "min",
+    "on_time_rate": "max",
+    "max_tardiness": "min",
+    "avg_tardiness": "min",
+    "avg_lateness": "min",
+    "max_lateness": "min",
+}
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def is_nonempty(value) -> bool:
-    return pd.notna(value) and str(value) not in {"", "None", "nan"}
-
-
-def short_fp(value, n: int = 8) -> str:
-    if not is_nonempty(value):
-        return ""
-    return str(value)[:n]
+def write_json(path: Path, obj) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, default=str), encoding="utf-8")
 
 
 def to_jsonable_records(df: pd.DataFrame) -> list[dict]:
@@ -61,237 +43,147 @@ def to_jsonable_records(df: pd.DataFrame) -> list[dict]:
     return clean.to_dict(orient="records")
 
 
-def write_json(path: Path, obj) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, default=str), encoding="utf-8")
-
-def stable_json(value) -> str:
-    if value is None:
-        return ""
-
-    try:
-        if pd.isna(value):
-            return ""
-    except (TypeError, ValueError):
-        pass
-
-    if value == "":
-        return ""
-
-    return json.dumps(value, sort_keys=True, default=str)
-
-# ---------------------------------------------------------------------------
-# Data preparation
-# ---------------------------------------------------------------------------
-
 def load_df_results(path: Path) -> pd.DataFrame:
     if not path.exists():
-        raise FileNotFoundError(
-            f"Missing {path}. Run experiments/evaluation/build_results_cache.py first."
-        )
+        raise FileNotFoundError(f"Missing {path}. Run build_results_cache.py first.")
 
     df = pd.read_pickle(path)
+
     if df.empty:
         raise RuntimeError(f"{path} exists but contains an empty dataframe.")
 
     return df
 
 
-def add_missing_website_columns(df: pd.DataFrame) -> pd.DataFrame:
+def add_metric_gaps(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    if "pipeline_chain_fingerprint" in df.columns and "pipeline_fp_short" not in df.columns:
-        df["pipeline_fp_short"] = df["pipeline_chain_fingerprint"].map(short_fp)
+    for metric, direction in METRICS.items():
+        if metric not in df.columns:
+            continue
 
-    for stage in STAGES:
-        for fp_kind in ["algo", "own", "chain"]:
-            fp_col = f"{stage}_{fp_kind}_fingerprint"
-            short_col = f"{stage}_{fp_kind}_fp_short"
+        df[metric] = pd.to_numeric(df[metric], errors="coerce")
+        valid = df[metric].notna()
 
-            if fp_col in df.columns and short_col not in df.columns:
-                df[short_col] = df[fp_col].map(short_fp)
+        if not valid.any():
+            continue
 
-    if "strategy" not in df.columns:
-        df["strategy"] = ""
+        grouped = df.loc[valid].groupby(
+            ["instance_set", "instance_name"],
+            dropna=False,
+        )[metric]
 
-    if "strategy_versioned" not in df.columns:
-        df["strategy_versioned"] = df["strategy"]
+        if direction == "min":
+            best = grouped.transform("min")
+            gap = ((df.loc[valid, metric] - best) / best.abs().clip(lower=1e-9)) * 100.0
+            is_best = df.loc[valid, metric].eq(best)
+        else:
+            best = grouped.transform("max")
+            gap = ((best - df.loc[valid, metric]) / best.abs().clip(lower=1e-9)) * 100.0
+            is_best = df.loc[valid, metric].eq(best)
+
+        df.loc[valid, f"{metric}_gap_pct"] = gap.clip(lower=0.0)
+        df.loc[valid, f"{metric}_is_best"] = is_best
 
     return df
 
 
-def make_overview(df: pd.DataFrame) -> dict:
-    overview = {
-        "n_results": int(len(df)),
-        "n_instance_sets": int(df["instance_set"].nunique()) if "instance_set" in df.columns else 0,
-        "n_instances": int(df["instance_name"].nunique()) if "instance_name" in df.columns else 0,
-        "n_strategies": int(df["strategy"].nunique()) if "strategy" in df.columns else 0,
-        "n_strategy_versions": int(df["strategy_versioned"].nunique()) if "strategy_versioned" in df.columns else 0,
-    }
-
-    if "pipeline_chain_fingerprint" in df.columns:
-        overview["n_pipeline_chains"] = int(df["pipeline_chain_fingerprint"].dropna().nunique())
-
-    if "instance_set" in df.columns:
-        overview["by_instance_set"] = (
-            df.groupby("instance_set", dropna=False)
-            .agg(
-                n_results=("instance_name", "count"),
-                n_instances=("instance_name", "nunique"),
-                n_strategies=("strategy", "nunique"),
-                n_strategy_versions=("strategy_versioned", "nunique"),
-            )
-            .reset_index()
-            .to_dict(orient="records")
-        )
-
-    return overview
-
-
-def make_version_overview(df: pd.DataFrame) -> list[dict]:
-    rows = []
-
-    for stage in STAGES:
-        algo_col = f"{stage}_algo"
-        algo_fp_col = f"{stage}_algo_fingerprint"
-        own_fp_col = f"{stage}_own_fingerprint"
-        config_col = f"{stage}_config"
-
-        if algo_col not in df.columns or own_fp_col not in df.columns:
-            continue
-
-        cols = [algo_col, own_fp_col]
-        if algo_fp_col in df.columns:
-            cols.append(algo_fp_col)
-        if config_col in df.columns:
-            cols.append(config_col)
-
-        tmp = df[cols].copy()
-        tmp = tmp[tmp[own_fp_col].map(is_nonempty)]
-
-        if tmp.empty:
-            continue
-
-        if config_col in tmp.columns:
-            tmp["config_json"] = tmp[config_col].map(stable_json)
-        else:
-            tmp["config_json"] = ""
-
-        if algo_fp_col not in tmp.columns:
-            tmp[algo_fp_col] = None
-
-        grouped = (
-            tmp.groupby([algo_col, own_fp_col, algo_fp_col, "config_json"], dropna=False)
-            .size()
-            .reset_index(name="n_results")
-        )
-
-        for _, row in grouped.iterrows():
-            config_json = row["config_json"]
-            config = json.loads(config_json) if config_json else None
-
-            rows.append({
-                "stage": stage,
-                "algo": row[algo_col],
-                "algo_fingerprint": row[algo_fp_col],
-                "algo_fp_short": short_fp(row[algo_fp_col]),
-                "own_fingerprint": row[own_fp_col],
-                "own_fp_short": short_fp(row[own_fp_col]),
-                "config": config,
-                "n_results": int(row["n_results"]),
-            })
-
-    return rows
-
-
-def make_performance_overview(df: pd.DataFrame) -> list[dict]:
-    metric_cols = [c for c in METRIC_COLS if c in df.columns]
-    if not metric_cols:
-        return []
+def make_dashboard_results(df: pd.DataFrame) -> pd.DataFrame:
+    df = add_metric_gaps(df)
 
     group_cols = [
-        c for c in [
-            "instance_set",
-            "strategy",
-            "strategy_versioned",
-            "pipeline_chain_fingerprint",
-            "pipeline_fp_short",
-        ]
-        if c in df.columns
-    ]
-
-    work = df.copy()
-    for col in metric_cols:
-        work[col] = pd.to_numeric(work[col], errors="coerce")
-
-    agg_spec = {
-        metric: (metric, "mean")
-        for metric in metric_cols
-    }
-    agg_spec["n_results"] = ("instance_name", "count")
-
-    out = (
-        work.groupby(group_cols, dropna=False)
-        .agg(**agg_spec)
-        .reset_index()
-    )
-
-    return to_jsonable_records(out)
-
-
-def select_result_columns(df: pd.DataFrame) -> pd.DataFrame:
-    cols = [
         "instance_set",
-        "instance_name",
         "problem_type",
         "strategy",
         "strategy_versioned",
-        "pipeline_chain_fingerprint",
-        "pipeline_fp_short",
-        "result_aggregation",
-        "file_path",
+        "item_assignment_algo",
+        "batching_algo",
+        "routing_algo",
+        "scheduling_algo",
     ]
 
-    for stage in STAGES:
-        cols.extend([
-            f"{stage}_algo",
-            f"{stage}_algo_raw",
-            f"{stage}_algo_fingerprint",
-            f"{stage}_algo_fp_short",
-            f"{stage}_own_fingerprint",
-            f"{stage}_own_fp_short",
-            f"{stage}_chain_fingerprint",
-            f"{stage}_chain_fp_short",
-            f"{stage}_config",
-            f"{stage}_time",
-        ])
+    group_cols = [c for c in group_cols if c in df.columns]
 
-    cols.extend(METRIC_COLS)
+    records = []
 
-    cols = [c for c in cols if c in df.columns]
-    return df[cols].copy()
+    for keys, g in df.groupby(group_cols, dropna=False):
+        record = dict(zip(group_cols, keys))
+        record["config_label"] = "-".join(
+            str(x)
+            for x in [
+                record.get("item_assignment_algo"),
+                record.get("batching_algo"),
+                record.get("routing_algo"),
+                record.get("scheduling_algo"),
+            ]
+            if pd.notna(x) and str(x) not in {"", "None", "nan"}
+        )
+        record["n_instances"] = int(g["instance_name"].nunique())
+        record["n_result_rows"] = int(len(g))
+
+        for metric in METRICS:
+            if metric not in g.columns:
+                continue
+
+            values = pd.to_numeric(g[metric], errors="coerce")
+            record[metric] = float(values.mean()) if values.notna().any() else None
+
+            gap_col = f"{metric}_gap_pct"
+            if gap_col in g.columns:
+                gaps = pd.to_numeric(g[gap_col], errors="coerce")
+                record[f"{metric}_gap_pct"] = float(gaps.mean()) if gaps.notna().any() else None
+
+            best_col = f"{metric}_is_best"
+            if best_col in g.columns:
+                best_count = g.loc[g[best_col].fillna(False), "instance_name"].nunique()
+                record[f"{metric}_best_count"] = int(best_count)
+
+        records.append(record)
+
+    out = pd.DataFrame(records)
+
+    return out.sort_values(
+        ["instance_set", "strategy_versioned"],
+        kind="stable",
+    ).reset_index(drop=True)
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def make_overview(raw: pd.DataFrame, dashboard: pd.DataFrame) -> dict:
+    return {
+        "raw_result_rows": int(len(raw)),
+        "dashboard_rows": int(len(dashboard)),
+        "n_instance_sets": int(raw["instance_set"].nunique()),
+        "n_instances": int(raw["instance_name"].nunique()),
+        "by_instance_set": (
+            raw.groupby("instance_set", dropna=False)
+            .agg(
+                raw_result_rows=("instance_name", "count"),
+                n_instances=("instance_name", "nunique"),
+            )
+            .reset_index()
+            .merge(
+                dashboard.groupby("instance_set", dropna=False)
+                .size()
+                .reset_index(name="pipeline_configurations"),
+                on="instance_set",
+                how="left",
+            )
+            .to_dict(orient="records")
+        ),
+    }
+
 
 def main() -> None:
-    df = load_df_results(DF_RESULTS_PATH)
-    df = add_missing_website_columns(df)
+    raw = load_df_results(DF_RESULTS_PATH)
+    dashboard = make_dashboard_results(raw)
 
-    results = select_result_columns(df)
+    write_json(SITE_DATA_DIR / "results.json", to_jsonable_records(dashboard))
+    write_json(SITE_DATA_DIR / "overview.json", make_overview(raw, dashboard))
 
-    write_json(SITE_DATA_DIR / "results.json", to_jsonable_records(results))
-    write_json(SITE_DATA_DIR / "overview.json", make_overview(df))
-    write_json(SITE_DATA_DIR / "version_overview.json", make_version_overview(df))
-    write_json(SITE_DATA_DIR / "performance_overview.json", make_performance_overview(df))
-
-    print(f"Read:  {DF_RESULTS_PATH}")
+    print(f"Read raw rows:       {len(raw)}")
+    print(f"Wrote dashboard rows: {len(dashboard)}")
     print(f"Wrote: {SITE_DATA_DIR / 'results.json'}")
     print(f"Wrote: {SITE_DATA_DIR / 'overview.json'}")
-    print(f"Wrote: {SITE_DATA_DIR / 'version_overview.json'}")
-    print(f"Wrote: {SITE_DATA_DIR / 'performance_overview.json'}")
 
 
 if __name__ == "__main__":

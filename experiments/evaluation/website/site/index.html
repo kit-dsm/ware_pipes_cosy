@@ -4,12 +4,26 @@
   <meta charset="utf-8" />
   <title>ware_ops_algos benchmark dashboard</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 
 <body>
-  <h1>ware_ops_algos benchmark dashboard</h1>
+  <header class="report-header">
+    <div class="brand">
+      <img class="logo" src="assets/imi-logo.png" alt="Institute logo" />
+      <div>
+        <div class="institute-name">Institute for Information Management in Engineering</div>
+        <h1>ware_ops_algos benchmark dashboard</h1>
+      </div>
+    </div>
 
+    <div class="report-meta">
+      <div>Benchmark report</div>
+      <div id="reportScope">All instance sets</div>
+    </div>
+  </header>
+
+  <main>
   <section class="controls">
     <label>
       Instance set
@@ -18,33 +32,31 @@
 
     <label>
       Metric
-      <select id="metric">
-        <option value="total_distance">Total distance</option>
-        <option value="total_cpu_time">CPU time</option>
-        <option value="makespan">Makespan</option>
-        <option value="on_time_rate">On-time rate</option>
-        <option value="max_tardiness">Max. tardiness</option>
-      </select>
-    </label>
-
-    <label>
-      Comparable only
-      <input id="onlyComparable" type="checkbox" checked />
+      <select id="metric"></select>
     </label>
   </section>
 
-  <h2>Performance by strategy</h2>
-  <p class="hint">
-    Bars show the mean metric over the selected instances. Coverage labels show how many instances were evaluated for each strategy.
-  </p>
-  <div id="performanceChart"></div>
+  <section id="summaryCards" class="summary-cards"></section>
 
-  <h2>Configured components used</h2>
-  <p class="hint">
-    Component version is the fingerprint of the configured component. Implementation version is the fingerprint of the underlying algorithm class.
-  </p>
-  <table id="componentTable"></table>
+  <section class="panel">
+    <h2>Pipeline configuration ranking</h2>
+    <p class="hint">
+      Versioned pipeline configurations ranked by mean relative deviation from the instance-wise best result for the selected objective.
+    </p>
+    <div id="performanceChart"></div>
+  </section>
+  </main>
 
-  <script src="app.js?v=6"></script>
+  <footer class="report-footer">
+    <strong>Impressum</strong>
+    <span>
+      Karlsruhe Institute of Technology - Institute for Information Management in Engineering - Data Science in Engineering
+    </span>
+    <span>
+      Responsible for content: Janik Bischoff · Contact: janik.bischoff@kit.edu
+    </span>
+  </footer>
+
+  <script src="app.js?v=10"></script>
 </body>
 </html>

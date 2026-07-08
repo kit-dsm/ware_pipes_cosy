@@ -1,35 +1,59 @@
-let results = [];
+const METRICS = [
+  "total_distance",
+  "total_cpu_time",
+  "makespan",
+  "on_time_rate",
+  "max_tardiness",
+  "avg_tardiness",
+  "avg_lateness",
+  "max_lateness",
+];
 
-const METRIC_INFO = {
-  total_distance: { label: "Total distance", direction: "min", unit: "" },
-  total_cpu_time: { label: "CPU time", direction: "min", unit: "s" },
-  makespan: { label: "Makespan", direction: "min", unit: "" },
-  on_time_rate: { label: "On-time rate", direction: "max", unit: "%" },
-  max_tardiness: { label: "Max. tardiness", direction: "min", unit: "" },
+const METRIC_LABELS = {
+  total_distance: "Total distance",
+  total_cpu_time: "CPU time",
+  makespan: "Makespan",
+  on_time_rate: "On-time rate",
+  max_tardiness: "Max tardiness",
+  avg_tardiness: "Avg. tardiness",
+  avg_lateness: "Avg. lateness",
+  max_lateness: "Max lateness",
 };
 
-const STAGES = ["item_assignment", "batching", "routing", "scheduling"];
+let results = [];
+let overview = {};
 
-async function loadData() {
-  results = await fetch("data/results.json?v=" + Date.now()).then(r => r.json());
+let rankingState = {
+  page: 1,
+  pageSize: 15,
+};
 
-  initControls();
-  render();
+function isFiniteNumber(value) {
+  return Number.isFinite(Number(value));
 }
 
-function unique(xs) {
-  return [...new Set(xs.filter(x => x !== null && x !== undefined && x !== ""))].sort();
+function fmt(value, digits = 3) {
+  if (!isFiniteNumber(value)) return "—";
+
+  return Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  });
 }
 
-function initControls() {
-  const instanceSets = ["All", ...unique(results.map(r => r.instance_set))];
+function esc(value) {
+  if (value === null || value === undefined) return "";
 
-  document.getElementById("instanceSet").innerHTML =
-    instanceSets.map(x => `<option value="${x}">${x}</option>`).join("");
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-  document.getElementById("instanceSet").addEventListener("change", render);
-  document.getElementById("metric").addEventListener("change", render);
-  document.getElementById("onlyComparable").addEventListener("change", render);
+function unique(values) {
+  return [...new Set(values.filter(v => v !== null && v !== undefined && v !== ""))];
 }
 
 function selectedInstanceSet() {
@@ -40,230 +64,289 @@ function selectedMetric() {
   return document.getElementById("metric").value;
 }
 
-function metricInfo(metric) {
-  return METRIC_INFO[metric] || { label: metric, direction: "min", unit: "" };
+function rowsForSelectedInstanceSet() {
+  const instanceSet = selectedInstanceSet();
+  return results.filter(r => r.instance_set === instanceSet);
 }
 
-function lowerIsBetter(metric) {
-  return metricInfo(metric).direction === "min";
+function availableMetrics(rows) {
+  return METRICS.filter(metric =>
+    rows.some(row => isFiniteNumber(row[metric]) || isFiniteNumber(row[`${metric}_gap_pct`]))
+  );
 }
 
-function filteredByInstanceSet() {
+function instanceCountForSelectedSet(rows) {
+  const fromRows = rows
+    .map(r => Number(r.n_instances))
+    .filter(Number.isFinite);
+
+  if (fromRows.length > 0) {
+    return Math.max(...fromRows);
+  }
+
   const instanceSet = selectedInstanceSet();
 
-  return results.filter(r => {
-    return instanceSet === "All" || r.instance_set === instanceSet;
-  });
+  const overviewRow = overview?.by_instance_set?.find(r => r.instance_set === instanceSet);
+  if (overviewRow && isFiniteNumber(overviewRow.n_instances)) {
+    return Number(overviewRow.n_instances);
+  }
+
+  return 0;
 }
 
-function filteredMetricResults() {
+function rawResultRowsForSelectedSet(rows) {
+  const fromRows = rows
+    .map(r => Number(r.n_result_rows))
+    .filter(Number.isFinite);
+
+  if (fromRows.length > 0) {
+    return fromRows.reduce((sum, value) => sum + value, 0);
+  }
+
+  const instanceSet = selectedInstanceSet();
+
+  const overviewRow = overview?.by_instance_set?.find(r => r.instance_set === instanceSet);
+  if (overviewRow && isFiniteNumber(overviewRow.raw_result_rows)) {
+    return Number(overviewRow.raw_result_rows);
+  }
+
+  return 0;
+}
+
+function initControls() {
+  const instanceSets = unique(results.map(r => r.instance_set)).sort();
+
+  const instanceSetSelect = document.getElementById("instanceSet");
+  instanceSetSelect.innerHTML = instanceSets
+    .map(instanceSet => `<option value="${esc(instanceSet)}">${esc(instanceSet)}</option>`)
+    .join("");
+
+  instanceSetSelect.addEventListener("change", () => {
+    rankingState.page = 1;
+    updateMetricOptions();
+    render();
+  });
+
+  const metricSelect = document.getElementById("metric");
+  metricSelect.addEventListener("change", () => {
+    rankingState.page = 1;
+    render();
+  });
+
+  updateMetricOptions();
+}
+
+function updateMetricOptions() {
+  const rows = rowsForSelectedInstanceSet();
+  const metrics = availableMetrics(rows);
+
+  const metricSelect = document.getElementById("metric");
+  const previousMetric = metricSelect.value;
+
+  metricSelect.innerHTML = metrics
+    .map(metric => `<option value="${esc(metric)}">${esc(METRIC_LABELS[metric] || metric)}</option>`)
+    .join("");
+
+  if (metrics.includes(previousMetric)) {
+    metricSelect.value = previousMetric;
+  }
+}
+
+function renderSummaryCards() {
+  const rows = rowsForSelectedInstanceSet();
+
+  const cards = [
+    ["Instances", instanceCountForSelectedSet(rows)],
+    ["Configurations", rows.length],
+    ["Raw result rows", rawResultRowsForSelectedSet(rows)],
+    ["Metrics", availableMetrics(rows).length],
+  ];
+
+  document.getElementById("summaryCards").innerHTML = cards.map(([label, value]) => `
+    <div class="summary-card">
+      <div class="summary-value">${Number(value).toLocaleString()}</div>
+      <div class="summary-label">${esc(label)}</div>
+    </div>
+  `).join("");
+
+  const scope = document.getElementById("reportScope");
+  if (scope) {
+    scope.textContent = selectedInstanceSet();
+  }
+}
+
+function rankedRows() {
   const metric = selectedMetric();
+  const gapMetric = `${metric}_gap_pct`;
+  const bestMetric = `${metric}_best_count`;
 
-  return filteredByInstanceSet().filter(r => {
-    return r[metric] !== null && r[metric] !== undefined && r[metric] !== "";
+  const rows = rowsForSelectedInstanceSet()
+    .filter(row => isFiniteNumber(row[metric]) || isFiniteNumber(row[gapMetric]))
+    .map(row => {
+      const value = isFiniteNumber(row[metric]) ? Number(row[metric]) : null;
+      const gap = isFiniteNumber(row[gapMetric])
+        ? Number(row[gapMetric])
+        : Number.POSITIVE_INFINITY;
+
+      return {
+        ...row,
+        _value: value,
+        _gap: gap,
+        _best: isFiniteNumber(row[bestMetric]) ? Number(row[bestMetric]) : 0,
+      };
+    });
+
+  rows.sort((a, b) => {
+    if (a._gap !== b._gap) return a._gap - b._gap;
+    if (b._best !== a._best) return b._best - a._best;
+
+    const aCpu = isFiniteNumber(a.total_cpu_time) ? Number(a.total_cpu_time) : Number.POSITIVE_INFINITY;
+    const bCpu = isFiniteNumber(b.total_cpu_time) ? Number(b.total_cpu_time) : Number.POSITIVE_INFINITY;
+    if (aCpu !== bCpu) return aCpu - bCpu;
+
+    return String(a.strategy_versioned || a.strategy || "").localeCompare(
+      String(b.strategy_versioned || b.strategy || "")
+    );
   });
-}
 
-function expectedInstances(rows) {
-  return unique(rows.map(r => r.instance_name)).length;
-}
+  let rank = 0;
+  let lastGap = null;
 
-function mean(xs) {
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-
-function short(value, n = 8) {
-  if (value === null || value === undefined || value === "") return "";
-  return String(value).slice(0, n);
-}
-
-function strategyGroups(rows, metric) {
-  const expected = expectedInstances(rows);
-  const grouped = new Map();
-
-  for (const r of rows) {
-    const strategy = r.strategy || r.strategy_versioned || "unknown";
-
-    if (!grouped.has(strategy)) {
-      grouped.set(strategy, {
-        strategy,
-        values: [],
-        instances: new Set(),
-        strategyVersions: new Set(),
-        pipelineVersions: new Set(),
-      });
+  return rows.map(row => {
+    if (lastGap === null || Math.abs(row._gap - lastGap) > 1e-9) {
+      rank += 1;
+      lastGap = row._gap;
     }
 
-    const g = grouped.get(strategy);
-    g.values.push(Number(r[metric]));
-    g.instances.add(r.instance_name);
-    g.strategyVersions.add(r.strategy_versioned || "");
-    g.pipelineVersions.add(r.pipeline_chain_fingerprint || "");
-  }
-
-  return [...grouped.values()].map(g => ({
-    strategy: g.strategy,
-    mean: mean(g.values),
-    n_results: g.values.length,
-    n_instances: g.instances.size,
-    expected_instances: expected,
-    n_strategy_versions: [...g.strategyVersions].filter(x => x !== "").length,
-    n_pipeline_versions: [...g.pipelineVersions].filter(x => x !== "").length,
-    versions: [...g.strategyVersions].filter(x => x !== ""),
-  }));
-}
-
-function comparableStrategyRows(rows, metric) {
-  const onlyComparable = document.getElementById("onlyComparable").checked;
-  let groups = strategyGroups(rows, metric);
-
-  if (onlyComparable) {
-    groups = groups.filter(g => g.n_instances === g.expected_instances);
-  }
-
-  return groups.sort((a, b) => {
-    return lowerIsBetter(metric) ? a.mean - b.mean : b.mean - a.mean;
+    return {
+      ...row,
+      rank,
+    };
   });
 }
 
 function renderPerformanceChart() {
-  const rows = filteredMetricResults();
   const metric = selectedMetric();
-  const info = metricInfo(metric);
-  const chartRows = comparableStrategyRows(rows, metric);
+  const rows = rankedRows();
+  const nInstances = instanceCountForSelectedSet(rows);
 
-  Plotly.newPlot("performanceChart", [{
-    type: "bar",
-    orientation: "h",
-    x: chartRows.map(r => r.mean),
-    y: chartRows.map(r => r.strategy),
-    text: chartRows.map(r => `${r.n_instances}/${r.expected_instances} instances`),
-    textposition: "auto",
-    customdata: chartRows.map(r => [
-      r.n_results,
-      r.n_strategy_versions,
-      r.n_pipeline_versions,
-      r.versions.join("<br>"),
-    ]),
-    hovertemplate:
-      "<b>%{y}</b><br>" +
-      `${info.label}: %{x}<br>` +
-      "coverage: %{text}<br>" +
-      "result rows: %{customdata[0]}<br>" +
-      "strategy versions: %{customdata[1]}<br>" +
-      "pipeline versions: %{customdata[2]}<br>" +
-      "<br><b>Versioned strategy</b><br>%{customdata[3]}" +
-      "<extra></extra>",
-  }], {
-    title: {
-      text: `Mean ${info.label} by strategy (${lowerIsBetter(metric) ? "lower is better" : "higher is better"})`,
-      x: 0,
-      xanchor: "left",
-      font: { size: 14 },
-    },
-    margin: { l: 320, r: 30, t: 45, b: 45 },
-    xaxis: { title: info.unit ? `${info.label} [${info.unit}]` : info.label },
-    yaxis: { automargin: true, autorange: "reversed" },
-  }, { displayModeBar: false });
-}
+  const pageSize = rankingState.pageSize;
+  const nPages = Math.max(1, Math.ceil(rows.length / pageSize));
 
-function className(path) {
-  return String(path).split(".").pop();
-}
+  rankingState.page = Math.max(1, Math.min(rankingState.page, nPages));
 
-function configValueText(value) {
-  if (value && typeof value === "object" && value.class) {
-    return `${className(value.class)}@${short(value.fingerprint)}`;
-  }
+  const start = (rankingState.page - 1) * pageSize;
+  const end = start + pageSize;
+  const pageRows = rows.slice(start, end);
 
-  if (value && typeof value === "object") {
-    return JSON.stringify(value);
-  }
+  const firstShown = rows.length === 0 ? 0 : start + 1;
+  const lastShown = Math.min(end, rows.length);
 
-  return String(value);
-}
+  const html = `
+    <div class="ranking-toolbar">
+      <div class="ranking-count">
+        Showing ${firstShown}–${lastShown} of ${rows.length} configurations
+      </div>
 
-function configText(config) {
-  if (!config) return "—";
+      <div class="ranking-controls">
+        <label>
+          Rows
+          <select id="rankingPageSize">
+            ${[10, 15, 25, 50, 100].map(size => `
+              <option value="${size}" ${size === pageSize ? "selected" : ""}>${size}</option>
+            `).join("")}
+          </select>
+        </label>
 
-  if (typeof config === "string") {
-    config = JSON.parse(config);
-  }
+        <button id="rankingPrev" ${rankingState.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${rankingState.page} / ${nPages}</span>
+        <button id="rankingNext" ${rankingState.page >= nPages ? "disabled" : ""}>Next</button>
+      </div>
+    </div>
 
-  return Object.entries(config)
-    .map(([key, value]) => `${key}: ${configValueText(value)}`)
-    .join(", ");
-}
+    <div class="ranking-table-scroll">
+      <table class="ranking-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Item assignment</th>
+            <th>Batching</th>
+            <th>Routing</th>
+            <th>Scheduling</th>
+            <th>Mean ${esc(METRIC_LABELS[metric] || metric)}</th>
+            <th>Deviation [%]</th>
+            <th>Best</th>
+            <th>Instances</th>
+            <th>CPU [s]</th>
+          </tr>
+        </thead>
 
-function componentRows() {
-  const rows = filteredByInstanceSet();
-  const grouped = new Map();
+        <tbody>
+          ${pageRows.map(row => `
+            <tr class="${row._gap <= 1e-9 ? "rank-best" : ""}" title="${esc(row.strategy_versioned || row.strategy || "")}">
+              <td>${row.rank}</td>
+              <td>${esc(row.item_assignment_algo || "—")}</td>
+              <td>${esc(row.batching_algo || "—")}</td>
+              <td>${esc(row.routing_algo || "—")}</td>
+              <td>${esc(row.scheduling_algo || "—")}</td>
+              <td>${fmt(row._value)}</td>
+              <td>${fmt(row._gap)}</td>
+              <td>${Number(row._best || 0)} / ${nInstances}</td>
+              <td>${nInstances}</td>
+              <td>${fmt(row.total_cpu_time)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 
-  for (const r of rows) {
-    for (const stage of STAGES) {
-      const component = r[`${stage}_algo`];
-      if (!component) continue;
+  document.getElementById("performanceChart").innerHTML = html;
 
-      const config = r[`${stage}_config`] || null;
-      const algoFp = r[`${stage}_algo_fingerprint`] || "";
-      const ownFp = r[`${stage}_own_fingerprint`] || "";
-      const key = `${stage}|${component}|${ownFp}|${JSON.stringify(config)}`;
+  document.getElementById("rankingPageSize").addEventListener("change", event => {
+    rankingState.pageSize = Number(event.target.value);
+    rankingState.page = 1;
+    renderPerformanceChart();
+  });
 
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          stage,
-          component,
-          config,
-          algoFp,
-          ownFp,
-          n_results: 0,
-        });
-      }
+  document.getElementById("rankingPrev").addEventListener("click", () => {
+    rankingState.page -= 1;
+    renderPerformanceChart();
+  });
 
-      grouped.get(key).n_results += 1;
-    }
-  }
-
-  return [...grouped.values()].sort((a, b) => {
-    return (
-      a.stage.localeCompare(b.stage) ||
-      a.component.localeCompare(b.component) ||
-      b.n_results - a.n_results
-    );
+  document.getElementById("rankingNext").addEventListener("click", () => {
+    rankingState.page += 1;
+    renderPerformanceChart();
   });
 }
 
-function renderComponentTable() {
-  const rows = componentRows();
-
-  const header = `
-    <tr>
-      <th>Stage</th>
-      <th>Component</th>
-      <th>Configuration</th>
-      <th>Implementation version</th>
-      <th>Component version</th>
-      <th>Result rows</th>
-    </tr>
-  `;
-
-  const body = rows.map(r => `
-    <tr>
-      <td>${r.stage}</td>
-      <td>${r.component}</td>
-      <td>${configText(r.config)}</td>
-      <td>${short(r.algoFp)}</td>
-      <td>${short(r.ownFp)}</td>
-      <td>${r.n_results}</td>
-    </tr>
-  `).join("");
-
-  document.getElementById("componentTable").innerHTML = header + body;
-}
-
 function render() {
+  renderSummaryCards();
   renderPerformanceChart();
-  renderComponentTable();
 }
 
-loadData();
+async function main() {
+  const [resultsResponse, overviewResponse] = await Promise.all([
+    fetch("data/results.json?v=12"),
+    fetch("data/overview.json?v=12"),
+  ]);
+
+  if (!resultsResponse.ok) {
+    throw new Error(`Could not load results.json: ${resultsResponse.status}`);
+  }
+
+  if (!overviewResponse.ok) {
+    throw new Error(`Could not load overview.json: ${overviewResponse.status}`);
+  }
+
+  results = await resultsResponse.json();
+  overview = await overviewResponse.json();
+
+  initControls();
+  render();
+}
+
+main().catch(error => {
+  console.error(error);
+  document.body.innerHTML = `<pre>${esc(error.stack || error)}</pre>`;
+});
