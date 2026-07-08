@@ -157,9 +157,13 @@ def ensure_required_columns(df: pd.DataFrame) -> pd.DataFrame:
             if short_col not in df.columns:
                 df[short_col] = df[fp_col].map(short_fp)
 
+    # Normalize the metric schema once.
+    # A metric may be unavailable for an instance set, but the column should still exist.
     for metric in METRICS:
-        if metric in df.columns:
-            df[metric] = pd.to_numeric(df[metric], errors="coerce")
+        if metric not in df.columns:
+            df[metric] = np.nan
+
+        df[metric] = pd.to_numeric(df[metric], errors="coerce")
 
     return df
 
@@ -193,16 +197,12 @@ def add_metric_gaps(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     for metric, direction in METRICS.items():
-        if metric not in df.columns:
-            continue
-
         gap_col = f"{metric}_gap_pct"
         best_col = f"{metric}_is_best"
 
         df[gap_col] = np.nan
         df[best_col] = False
 
-        df[metric] = pd.to_numeric(df[metric], errors="coerce")
         valid = df[metric].notna()
 
         if not valid.any():
