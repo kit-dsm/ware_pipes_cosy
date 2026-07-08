@@ -1,4 +1,4 @@
-const DATA_VERSION = "15";
+const DATA_VERSION = "16";
 
 const METRICS = [
   "total_distance",
@@ -30,6 +30,10 @@ let overview = {};
 const state = {
   page: 1,
   pageSize: 15,
+
+  detailPage: 1,
+  detailPageSize: 25,
+
   selectedPipelineKey: null,
   showVariantComparison: false,
 };
@@ -144,6 +148,7 @@ function initControls() {
 
   byId("instanceSet").addEventListener("change", () => {
     state.page = 1;
+    state.detailPage = 1;
     state.selectedPipelineKey = null;
     state.showVariantComparison = false;
     updateMetricOptions();
@@ -152,6 +157,7 @@ function initControls() {
 
   byId("metric").addEventListener("change", () => {
     state.page = 1;
+    state.detailPage = 1;
     state.showVariantComparison = false;
     render();
   });
@@ -327,8 +333,11 @@ function renderMainTable() {
   document.querySelectorAll(".clickable-row").forEach(rowElement => {
     rowElement.addEventListener("click", () => {
       const row = pageRows[Number(rowElement.dataset.rowIndex)];
+
       state.selectedPipelineKey = row.pipeline_key;
+      state.detailPage = 1;
       state.showVariantComparison = false;
+
       renderMainTable();
       renderDetailPanel();
     });
@@ -386,6 +395,23 @@ function selectedVariantRows() {
     });
 }
 
+function detailPageRows(instanceRows) {
+  const pageSize = state.detailPageSize;
+  const pageCount = Math.max(1, Math.ceil(instanceRows.length / pageSize));
+
+  state.detailPage = Math.max(1, Math.min(state.detailPage, pageCount));
+
+  const start = (state.detailPage - 1) * pageSize;
+  const end = start + pageSize;
+
+  return {
+    pageRows: instanceRows.slice(start, end),
+    pageCount,
+    start,
+    end,
+  };
+}
+
 function renderDetailPanel() {
   const detailPanel = byId("detailPanel");
   const detailContent = byId("detailContent");
@@ -412,6 +438,13 @@ function renderDetailPanel() {
 
   const instanceRows = selectedInstanceRows();
   const variantRows = selectedVariantRows();
+
+  const {
+    pageRows: instancePageRows,
+    pageCount: detailPageCount,
+    start: detailStart,
+    end: detailEnd,
+  } = detailPageRows(instanceRows);
 
   detailPanel.hidden = false;
 
@@ -454,6 +487,28 @@ function renderDetailPanel() {
       Each row shows how this pipeline configuration performed on one instance for the selected metric.
     </p>
 
+    <div class="ranking-toolbar">
+      <div class="ranking-count">
+        Showing ${instanceRows.length === 0 ? 0 : detailStart + 1}–${Math.min(detailEnd, instanceRows.length)}
+        of ${instanceRows.length} instances
+      </div>
+
+      <div class="ranking-controls">
+        <label>
+          Rows
+          <select id="detailPageSize">
+            ${[25, 50, 100, 250, 500].map(size => `
+              <option value="${size}" ${size === state.detailPageSize ? "selected" : ""}>${size}</option>
+            `).join("")}
+          </select>
+        </label>
+
+        <button id="detailPrev" ${state.detailPage <= 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${state.detailPage} / ${detailPageCount}</span>
+        <button id="detailNext" ${state.detailPage >= detailPageCount ? "disabled" : ""}>Next</button>
+      </div>
+    </div>
+
     <div class="table-wrap">
       <table class="data-table instance-table">
         <thead>
@@ -466,7 +521,7 @@ function renderDetailPanel() {
           </tr>
         </thead>
         <tbody>
-          ${instanceRows.map(row => `
+          ${instancePageRows.map(row => `
             <tr class="${row._isBest ? "is-best" : ""}">
               <td>
                 <span class="instance-name" title="${esc(row.instance_name || "")}">
@@ -530,8 +585,25 @@ function renderDetailPanel() {
 
   byId("closeDetail").addEventListener("click", () => {
     state.selectedPipelineKey = null;
+    state.detailPage = 1;
     state.showVariantComparison = false;
     render();
+  });
+
+  byId("detailPageSize").addEventListener("change", event => {
+    state.detailPageSize = Number(event.target.value);
+    state.detailPage = 1;
+    renderDetailPanel();
+  });
+
+  byId("detailPrev").addEventListener("click", () => {
+    state.detailPage -= 1;
+    renderDetailPanel();
+  });
+
+  byId("detailNext").addEventListener("click", () => {
+    state.detailPage += 1;
+    renderDetailPanel();
   });
 
   byId("toggleVariants").addEventListener("click", () => {
