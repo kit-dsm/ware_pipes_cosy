@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>ware_ops_algos benchmark dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 
 <body>
@@ -19,32 +18,37 @@
 
     <div class="report-meta">
       <div>Benchmark report</div>
-      <div id="reportScope">All instance sets</div>
+      <div id="reportScope">—</div>
     </div>
   </header>
 
   <main>
-  <section class="controls">
-    <label>
-      Instance set
-      <select id="instanceSet"></select>
-    </label>
+    <section class="controls">
+      <label>
+        Instance set
+        <select id="instanceSet"></select>
+      </label>
 
-    <label>
-      Metric
-      <select id="metric"></select>
-    </label>
-  </section>
+      <label>
+        Metric
+        <select id="metric"></select>
+      </label>
+    </section>
 
-  <section id="summaryCards" class="summary-cards"></section>
+    <section id="summaryCards" class="summary-cards"></section>
 
-  <section class="panel">
-    <h2>Pipeline configuration ranking</h2>
-    <p class="hint">
-      Versioned pipeline configurations ranked by mean relative deviation from the instance-wise best result for the selected objective.
-    </p>
-    <div id="performanceChart"></div>
-  </section>
+    <section class="panel">
+      <h2>Aggregated configuration results</h2>
+      <p class="hint">
+        Each row is one pipeline configuration aggregated over all instances in the selected instance set.
+        Click a row to inspect the instance-level results.
+      </p>
+      <div id="performanceChart"></div>
+    </section>
+
+    <section id="detailPanel" class="panel" hidden>
+      <div id="detailContent"></div>
+    </section>
   </main>
 
   <footer class="report-footer">
@@ -57,6 +61,6 @@
     </span>
   </footer>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

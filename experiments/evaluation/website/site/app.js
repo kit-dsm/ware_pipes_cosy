@@ -1,3 +1,5 @@
+const DATA_VERSION = "15";
+
 const METRICS = [
   "total_distance",
   "total_cpu_time",
@@ -21,12 +23,20 @@ const METRIC_LABELS = {
 };
 
 let results = [];
+let pipelineInstances = [];
+let pipelineVariants = [];
 let overview = {};
 
-let rankingState = {
+const state = {
   page: 1,
   pageSize: 15,
+  selectedPipelineKey: null,
+  showVariantComparison: false,
 };
+
+function byId(id) {
+  return document.getElementById(id);
+}
 
 function isFiniteNumber(value) {
   return Number.isFinite(Number(value));
@@ -53,83 +63,96 @@ function esc(value) {
 }
 
 function unique(values) {
-  return [...new Set(values.filter(v => v !== null && v !== undefined && v !== ""))];
+  return [...new Set(values.filter(value =>
+    value !== null && value !== undefined && value !== ""
+  ))];
+}
+
+function metricLabel(metric) {
+  return METRIC_LABELS[metric] || metric;
+}
+
+function displayInstanceName(value) {
+  if (value === null || value === undefined || value === "") return "—";
+
+  return String(value)
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.(json|pkl|pickle|csv|txt)$/i, "");
 }
 
 function selectedInstanceSet() {
-  return document.getElementById("instanceSet").value;
+  return byId("instanceSet").value;
 }
 
 function selectedMetric() {
-  return document.getElementById("metric").value;
+  return byId("metric").value;
 }
 
-function rowsForSelectedInstanceSet() {
+function mainRowsForSelectedSet() {
   const instanceSet = selectedInstanceSet();
-  return results.filter(r => r.instance_set === instanceSet);
+  return results.filter(row => row.instance_set === instanceSet);
+}
+
+function overviewForSelectedSet() {
+  const instanceSet = selectedInstanceSet();
+  return overview?.by_instance_set?.find(row => row.instance_set === instanceSet) || null;
 }
 
 function availableMetrics(rows) {
   return METRICS.filter(metric =>
-    rows.some(row => isFiniteNumber(row[metric]) || isFiniteNumber(row[`${metric}_gap_pct`]))
+    rows.some(row =>
+      isFiniteNumber(row[metric]) || isFiniteNumber(row[`${metric}_gap_pct`])
+    )
   );
 }
 
-function instanceCountForSelectedSet(rows) {
-  const fromRows = rows
-    .map(r => Number(r.n_instances))
+function instanceCount(rows) {
+  const values = rows
+    .map(row => Number(row.n_instances))
     .filter(Number.isFinite);
 
-  if (fromRows.length > 0) {
-    return Math.max(...fromRows);
-  }
+  if (values.length > 0) return Math.max(...values);
 
-  const instanceSet = selectedInstanceSet();
-
-  const overviewRow = overview?.by_instance_set?.find(r => r.instance_set === instanceSet);
-  if (overviewRow && isFiniteNumber(overviewRow.n_instances)) {
-    return Number(overviewRow.n_instances);
-  }
-
-  return 0;
+  const overviewRow = overviewForSelectedSet();
+  return isFiniteNumber(overviewRow?.n_instances)
+    ? Number(overviewRow.n_instances)
+    : 0;
 }
 
-function rawResultRowsForSelectedSet(rows) {
-  const fromRows = rows
-    .map(r => Number(r.n_result_rows))
+function rawResultCount(rows) {
+  const values = rows
+    .map(row => Number(row.n_result_rows))
     .filter(Number.isFinite);
 
-  if (fromRows.length > 0) {
-    return fromRows.reduce((sum, value) => sum + value, 0);
+  if (values.length > 0) {
+    return values.reduce((sum, value) => sum + value, 0);
   }
 
-  const instanceSet = selectedInstanceSet();
-
-  const overviewRow = overview?.by_instance_set?.find(r => r.instance_set === instanceSet);
-  if (overviewRow && isFiniteNumber(overviewRow.raw_result_rows)) {
-    return Number(overviewRow.raw_result_rows);
-  }
-
-  return 0;
+  const overviewRow = overviewForSelectedSet();
+  return isFiniteNumber(overviewRow?.raw_result_rows)
+    ? Number(overviewRow.raw_result_rows)
+    : 0;
 }
 
 function initControls() {
-  const instanceSets = unique(results.map(r => r.instance_set)).sort();
+  const instanceSets = unique(results.map(row => row.instance_set)).sort();
 
-  const instanceSetSelect = document.getElementById("instanceSet");
-  instanceSetSelect.innerHTML = instanceSets
-    .map(instanceSet => `<option value="${esc(instanceSet)}">${esc(instanceSet)}</option>`)
+  byId("instanceSet").innerHTML = instanceSets
+    .map(value => `<option value="${esc(value)}">${esc(value)}</option>`)
     .join("");
 
-  instanceSetSelect.addEventListener("change", () => {
-    rankingState.page = 1;
+  byId("instanceSet").addEventListener("change", () => {
+    state.page = 1;
+    state.selectedPipelineKey = null;
+    state.showVariantComparison = false;
     updateMetricOptions();
     render();
   });
 
-  const metricSelect = document.getElementById("metric");
-  metricSelect.addEventListener("change", () => {
-    rankingState.page = 1;
+  byId("metric").addEventListener("change", () => {
+    state.page = 1;
+    state.showVariantComparison = false;
     render();
   });
 
@@ -137,14 +160,13 @@ function initControls() {
 }
 
 function updateMetricOptions() {
-  const rows = rowsForSelectedInstanceSet();
+  const rows = mainRowsForSelectedSet();
   const metrics = availableMetrics(rows);
-
-  const metricSelect = document.getElementById("metric");
+  const metricSelect = byId("metric");
   const previousMetric = metricSelect.value;
 
   metricSelect.innerHTML = metrics
-    .map(metric => `<option value="${esc(metric)}">${esc(METRIC_LABELS[metric] || metric)}</option>`)
+    .map(metric => `<option value="${esc(metric)}">${esc(metricLabel(metric))}</option>`)
     .join("");
 
   if (metrics.includes(previousMetric)) {
@@ -153,48 +175,39 @@ function updateMetricOptions() {
 }
 
 function renderSummaryCards() {
-  const rows = rowsForSelectedInstanceSet();
+  const rows = mainRowsForSelectedSet();
 
   const cards = [
-    ["Instances", instanceCountForSelectedSet(rows)],
-    ["Configurations", rows.length],
-    ["Raw result rows", rawResultRowsForSelectedSet(rows)],
+    ["Instances", instanceCount(rows)],
+    ["Pipeline configurations", rows.length],
+    ["Raw result rows", rawResultCount(rows)],
     ["Metrics", availableMetrics(rows).length],
   ];
 
-  document.getElementById("summaryCards").innerHTML = cards.map(([label, value]) => `
+  byId("summaryCards").innerHTML = cards.map(([label, value]) => `
     <div class="summary-card">
       <div class="summary-value">${Number(value).toLocaleString()}</div>
       <div class="summary-label">${esc(label)}</div>
     </div>
   `).join("");
 
-  const scope = document.getElementById("reportScope");
-  if (scope) {
-    scope.textContent = selectedInstanceSet();
-  }
+  const scope = byId("reportScope");
+  if (scope) scope.textContent = selectedInstanceSet();
 }
 
-function rankedRows() {
+function rankedMainRows() {
   const metric = selectedMetric();
   const gapMetric = `${metric}_gap_pct`;
   const bestMetric = `${metric}_best_count`;
 
-  const rows = rowsForSelectedInstanceSet()
+  const rows = mainRowsForSelectedSet()
     .filter(row => isFiniteNumber(row[metric]) || isFiniteNumber(row[gapMetric]))
-    .map(row => {
-      const value = isFiniteNumber(row[metric]) ? Number(row[metric]) : null;
-      const gap = isFiniteNumber(row[gapMetric])
-        ? Number(row[gapMetric])
-        : Number.POSITIVE_INFINITY;
-
-      return {
-        ...row,
-        _value: value,
-        _gap: gap,
-        _best: isFiniteNumber(row[bestMetric]) ? Number(row[bestMetric]) : 0,
-      };
-    });
+    .map(row => ({
+      ...row,
+      _value: isFiniteNumber(row[metric]) ? Number(row[metric]) : null,
+      _gap: isFiniteNumber(row[gapMetric]) ? Number(row[gapMetric]) : Number.POSITIVE_INFINITY,
+      _best: isFiniteNumber(row[bestMetric]) ? Number(row[bestMetric]) : 0,
+    }));
 
   rows.sort((a, b) => {
     if (a._gap !== b._gap) return a._gap - b._gap;
@@ -204,9 +217,7 @@ function rankedRows() {
     const bCpu = isFiniteNumber(b.total_cpu_time) ? Number(b.total_cpu_time) : Number.POSITIVE_INFINITY;
     if (aCpu !== bCpu) return aCpu - bCpu;
 
-    return String(a.strategy_versioned || a.strategy || "").localeCompare(
-      String(b.strategy_versioned || b.strategy || "")
-    );
+    return String(a.pipeline_label || "").localeCompare(String(b.pipeline_label || ""));
   });
 
   let rank = 0;
@@ -218,34 +229,27 @@ function rankedRows() {
       lastGap = row._gap;
     }
 
-    return {
-      ...row,
-      rank,
-    };
+    return { ...row, rank };
   });
 }
 
-function renderPerformanceChart() {
+function renderMainTable() {
   const metric = selectedMetric();
-  const rows = rankedRows();
-  const nInstances = instanceCountForSelectedSet(rows);
+  const rows = rankedMainRows();
+  const pageSize = state.pageSize;
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
 
-  const pageSize = rankingState.pageSize;
-  const nPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  state.page = Math.max(1, Math.min(state.page, pageCount));
 
-  rankingState.page = Math.max(1, Math.min(rankingState.page, nPages));
-
-  const start = (rankingState.page - 1) * pageSize;
+  const start = (state.page - 1) * pageSize;
   const end = start + pageSize;
   const pageRows = rows.slice(start, end);
 
-  const firstShown = rows.length === 0 ? 0 : start + 1;
-  const lastShown = Math.min(end, rows.length);
-
-  const html = `
+  byId("performanceChart").innerHTML = `
     <div class="ranking-toolbar">
       <div class="ranking-count">
-        Showing ${firstShown}–${lastShown} of ${rows.length} configurations
+        Showing ${rows.length === 0 ? 0 : start + 1}–${Math.min(end, rows.length)}
+        of ${rows.length} pipeline configurations
       </div>
 
       <div class="ranking-controls">
@@ -258,42 +262,45 @@ function renderPerformanceChart() {
           </select>
         </label>
 
-        <button id="rankingPrev" ${rankingState.page <= 1 ? "disabled" : ""}>Previous</button>
-        <span>Page ${rankingState.page} / ${nPages}</span>
-        <button id="rankingNext" ${rankingState.page >= nPages ? "disabled" : ""}>Next</button>
+        <button id="rankingPrev" ${state.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${state.page} / ${pageCount}</span>
+        <button id="rankingNext" ${state.page >= pageCount ? "disabled" : ""}>Next</button>
       </div>
     </div>
 
-    <div class="ranking-table-scroll">
-      <table class="ranking-table">
+    <div class="table-wrap">
+      <table class="data-table main-table">
         <thead>
           <tr>
-            <th>Rank</th>
+            <th class="num">Rank</th>
             <th>Item assignment</th>
             <th>Batching</th>
             <th>Routing</th>
             <th>Scheduling</th>
-            <th>Mean ${esc(METRIC_LABELS[metric] || metric)}</th>
-            <th>Deviation [%]</th>
-            <th>Best</th>
-            <th>Instances</th>
-            <th>CPU [s]</th>
+            <th class="num">Mean ${esc(metricLabel(metric))}</th>
+            <th class="num">Deviation [%]</th>
+            <th class="num">Best</th>
+            <th class="num">Instances</th>
+            <th class="num">CPU [s]</th>
           </tr>
         </thead>
-
         <tbody>
-          ${pageRows.map(row => `
-            <tr class="${row._gap <= 1e-9 ? "rank-best" : ""}" title="${esc(row.strategy_versioned || row.strategy || "")}">
-              <td>${row.rank}</td>
+          ${pageRows.map((row, index) => `
+            <tr
+              class="clickable-row ${row.pipeline_key === state.selectedPipelineKey ? "is-selected" : ""} ${row._gap <= 1e-9 ? "is-best" : ""}"
+              data-row-index="${index}"
+              title="Click to show instance-level results"
+            >
+              <td class="num">${row.rank}</td>
               <td>${esc(row.item_assignment_algo || "—")}</td>
               <td>${esc(row.batching_algo || "—")}</td>
               <td>${esc(row.routing_algo || "—")}</td>
               <td>${esc(row.scheduling_algo || "—")}</td>
-              <td>${fmt(row._value)}</td>
-              <td>${fmt(row._gap)}</td>
-              <td>${Number(row._best || 0)} / ${nInstances}</td>
-              <td>${nInstances}</td>
-              <td>${fmt(row.total_cpu_time)}</td>
+              <td class="num">${fmt(row._value)}</td>
+              <td class="num">${fmt(row._gap)}</td>
+              <td class="num">${Number(row._best || 0)} / ${Number(row.n_instances || 0)}</td>
+              <td class="num">${Number(row.n_instances || 0)}</td>
+              <td class="num">${fmt(row.total_cpu_time)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -301,46 +308,266 @@ function renderPerformanceChart() {
     </div>
   `;
 
-  document.getElementById("performanceChart").innerHTML = html;
-
-  document.getElementById("rankingPageSize").addEventListener("change", event => {
-    rankingState.pageSize = Number(event.target.value);
-    rankingState.page = 1;
-    renderPerformanceChart();
+  byId("rankingPageSize").addEventListener("change", event => {
+    state.pageSize = Number(event.target.value);
+    state.page = 1;
+    renderMainTable();
   });
 
-  document.getElementById("rankingPrev").addEventListener("click", () => {
-    rankingState.page -= 1;
-    renderPerformanceChart();
+  byId("rankingPrev").addEventListener("click", () => {
+    state.page -= 1;
+    renderMainTable();
   });
 
-  document.getElementById("rankingNext").addEventListener("click", () => {
-    rankingState.page += 1;
-    renderPerformanceChart();
+  byId("rankingNext").addEventListener("click", () => {
+    state.page += 1;
+    renderMainTable();
+  });
+
+  document.querySelectorAll(".clickable-row").forEach(rowElement => {
+    rowElement.addEventListener("click", () => {
+      const row = pageRows[Number(rowElement.dataset.rowIndex)];
+      state.selectedPipelineKey = row.pipeline_key;
+      state.showVariantComparison = false;
+      renderMainTable();
+      renderDetailPanel();
+    });
+  });
+}
+
+function selectedMainRow() {
+  if (!state.selectedPipelineKey) return null;
+
+  return mainRowsForSelectedSet()
+    .find(row => row.pipeline_key === state.selectedPipelineKey) || null;
+}
+
+function selectedInstanceRows() {
+  const metric = selectedMetric();
+  const gapMetric = `${metric}_gap_pct`;
+
+  return pipelineInstances
+    .filter(row =>
+      row.instance_set === selectedInstanceSet() &&
+      row.pipeline_key === state.selectedPipelineKey
+    )
+    .map(row => ({
+      ...row,
+      _value: isFiniteNumber(row[metric]) ? Number(row[metric]) : null,
+      _gap: isFiniteNumber(row[gapMetric]) ? Number(row[gapMetric]) : Number.POSITIVE_INFINITY,
+      _isBest: Boolean(row[`${metric}_is_best`]),
+    }))
+    .sort((a, b) => {
+      if (a._gap !== b._gap) return a._gap - b._gap;
+      return String(a.instance_name || "").localeCompare(String(b.instance_name || ""));
+    });
+}
+
+function selectedVariantRows() {
+  const metric = selectedMetric();
+  const gapMetric = `${metric}_gap_pct`;
+  const bestMetric = `${metric}_best_count`;
+
+  return pipelineVariants
+    .filter(row =>
+      row.instance_set === selectedInstanceSet() &&
+      row.pipeline_key === state.selectedPipelineKey
+    )
+    .map(row => ({
+      ...row,
+      _value: isFiniteNumber(row[metric]) ? Number(row[metric]) : null,
+      _gap: isFiniteNumber(row[gapMetric]) ? Number(row[gapMetric]) : Number.POSITIVE_INFINITY,
+      _best: isFiniteNumber(row[bestMetric]) ? Number(row[bestMetric]) : 0,
+    }))
+    .sort((a, b) => {
+      if (a._gap !== b._gap) return a._gap - b._gap;
+      if (b._best !== a._best) return b._best - a._best;
+      return String(a.pipeline_version_label || "").localeCompare(String(b.pipeline_version_label || ""));
+    });
+}
+
+function renderDetailPanel() {
+  const detailPanel = byId("detailPanel");
+  const detailContent = byId("detailContent");
+
+  if (!state.selectedPipelineKey) {
+    detailPanel.hidden = true;
+    detailContent.innerHTML = "";
+    return;
+  }
+
+  const mainRow = selectedMainRow();
+  if (!mainRow) {
+    detailPanel.hidden = true;
+    detailContent.innerHTML = "";
+    return;
+  }
+
+  const metric = selectedMetric();
+  const label = metricLabel(metric);
+
+  const value = isFiniteNumber(mainRow[metric]) ? Number(mainRow[metric]) : null;
+  const gap = isFiniteNumber(mainRow[`${metric}_gap_pct`]) ? Number(mainRow[`${metric}_gap_pct`]) : null;
+  const bestCount = isFiniteNumber(mainRow[`${metric}_best_count`]) ? Number(mainRow[`${metric}_best_count`]) : 0;
+
+  const instanceRows = selectedInstanceRows();
+  const variantRows = selectedVariantRows();
+
+  detailPanel.hidden = false;
+
+  detailContent.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <h2>Pipeline-level results</h2>
+        <p class="hint">
+          ${esc(mainRow.pipeline_label || "unknown pipeline")} over all instances in ${esc(selectedInstanceSet())}.
+        </p>
+      </div>
+
+      <button id="closeDetail">Close details</button>
+    </div>
+
+    <div class="detail-summary">
+      <div class="summary-card">
+        <div class="summary-value">${fmt(value)}</div>
+        <div class="summary-label">Mean ${esc(label)}</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-value">${fmt(gap)}</div>
+        <div class="summary-label">Mean deviation [%]</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-value">${bestCount} / ${Number(mainRow.n_instances || 0)}</div>
+        <div class="summary-label">Best instances</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-value">${fmt(mainRow.total_cpu_time)}</div>
+        <div class="summary-label">Mean CPU [s]</div>
+      </div>
+    </div>
+
+    <h3>Instance-level results</h3>
+    <p class="hint">
+      Each row shows how this pipeline configuration performed on one instance for the selected metric.
+    </p>
+
+    <div class="table-wrap">
+      <table class="data-table instance-table">
+        <thead>
+          <tr>
+            <th>Instance</th>
+            <th class="num">${esc(label)}</th>
+            <th class="num">Deviation [%]</th>
+            <th class="num">Best</th>
+            <th class="num">CPU [s]</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${instanceRows.map(row => `
+            <tr class="${row._isBest ? "is-best" : ""}">
+              <td>
+                <span class="instance-name" title="${esc(row.instance_name || "")}">
+                  ${esc(displayInstanceName(row.instance_name))}
+                </span>
+              </td>
+              <td class="num">${fmt(row._value)}</td>
+              <td class="num">${fmt(row._gap)}</td>
+              <td class="num">${row._isBest ? "yes" : "no"}</td>
+              <td class="num">${fmt(row.total_cpu_time)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="detail-actions">
+      <button id="toggleVariants">
+        ${state.showVariantComparison ? "Hide configuration variants" : "Show configuration variants"}
+      </button>
+    </div>
+
+    <div id="variantComparison" ${state.showVariantComparison ? "" : "hidden"}>
+      <h3>Configuration variant comparison</h3>
+      <p class="hint">
+        Each row is one concrete variant of the selected pipeline configuration aggregated over the selected instance set.
+      </p>
+
+      <div class="table-wrap">
+        <table class="data-table variant-table">
+          <thead>
+            <tr>
+              <th>Variant</th>
+              <th class="num">Mean ${esc(label)}</th>
+              <th class="num">Deviation [%]</th>
+              <th class="num">Best</th>
+              <th class="num">Instances</th>
+              <th class="num">CPU [s]</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${variantRows.map(row => `
+              <tr class="${row._gap <= 1e-9 ? "is-best" : ""}">
+                <td>
+                  <span class="variant-label" title="${esc(row.pipeline_version_key || "")}">
+                    ${esc(row.pipeline_version_label || "unknown variant")}
+                  </span>
+                </td>
+                <td class="num">${fmt(row._value)}</td>
+                <td class="num">${fmt(row._gap)}</td>
+                <td class="num">${Number(row._best || 0)} / ${Number(row.n_instances || 0)}</td>
+                <td class="num">${Number(row.n_instances || 0)}</td>
+                <td class="num">${fmt(row.total_cpu_time)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  byId("closeDetail").addEventListener("click", () => {
+    state.selectedPipelineKey = null;
+    state.showVariantComparison = false;
+    render();
+  });
+
+  byId("toggleVariants").addEventListener("click", () => {
+    state.showVariantComparison = !state.showVariantComparison;
+    renderDetailPanel();
   });
 }
 
 function render() {
   renderSummaryCards();
-  renderPerformanceChart();
+  renderMainTable();
+  renderDetailPanel();
+}
+
+async function loadJson(path) {
+  const response = await fetch(`${path}?v=${DATA_VERSION}`);
+
+  if (!response.ok) {
+    throw new Error(`Could not load ${path}: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 async function main() {
-  const [resultsResponse, overviewResponse] = await Promise.all([
-    fetch("data/results.json?v=12"),
-    fetch("data/overview.json?v=12"),
+  [
+    results,
+    pipelineInstances,
+    pipelineVariants,
+    overview,
+  ] = await Promise.all([
+    loadJson("data/results.json"),
+    loadJson("data/pipeline_instances.json"),
+    loadJson("data/pipeline_versions.json"),
+    loadJson("data/overview.json"),
   ]);
-
-  if (!resultsResponse.ok) {
-    throw new Error(`Could not load results.json: ${resultsResponse.status}`);
-  }
-
-  if (!overviewResponse.ok) {
-    throw new Error(`Could not load overview.json: ${overviewResponse.status}`);
-  }
-
-  results = await resultsResponse.json();
-  overview = await overviewResponse.json();
 
   initControls();
   render();
