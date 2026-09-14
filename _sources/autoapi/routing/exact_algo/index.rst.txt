@@ -1,0 +1,38 @@
+routing.exact_algo
+==================
+
+.. py:module:: routing.exact_algo
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   routing.exact_algo.ExactSolving
+
+
+Module Contents
+---------------
+
+.. py:class:: ExactSolving(*args, **kwargs)
+
+   Bases: :py:obj:`ware_ops_pipes.pipelines.templates.cosy_template.PickerRouting`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: abstract
+      :value: False
+
+
+
+   .. py:attribute:: algo_cls
+
+

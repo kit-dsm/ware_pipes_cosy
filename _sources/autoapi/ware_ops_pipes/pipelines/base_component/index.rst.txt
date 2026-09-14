@@ -1,0 +1,6 @@
+ware_ops_pipes.pipelines.base_component
+=======================================
+
+.. py:module:: ware_ops_pipes.pipelines.base_component
+
+

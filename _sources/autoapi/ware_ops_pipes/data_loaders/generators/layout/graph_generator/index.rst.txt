@@ -1,0 +1,277 @@
+ware_ops_pipes.data_loaders.generators.layout.graph_generator
+=============================================================
+
+.. py:module:: ware_ops_pipes.data_loaders.generators.layout.graph_generator
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.GraphParameters
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.GraphExplicitRepresentation
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.GraphGeneratorBase
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.ExplicitGraphGenerator
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.ShelfStorageGraphGenerator
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.MultiBlockShelfStorageGraphGenerator
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.distance_matrix_generator
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.distance_matrix_generator_scipy
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.distance_matrix_generator_from_shortest_paths
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.tour_matrix_generator
+   ware_ops_pipes.data_loaders.generators.layout.graph_generator.predecessor_matrix_generator
+
+
+Module Contents
+---------------
+
+.. py:function:: distance_matrix_generator(G: networkx.Graph) -> pandas.DataFrame
+
+   Creates a distance matrix of the pick nodes in the warehouse using the Floyd-Warshall algorithm.
+
+
+.. py:function:: distance_matrix_generator_scipy(G: networkx.Graph)
+
+.. py:function:: distance_matrix_generator_from_shortest_paths(G: networkx.Graph, shortest_paths: dict)
+
+   Generates the distance matrix for a graph based on pre-calculated shortest-paths
+
+
+.. py:function:: tour_matrix_generator(G: networkx.Graph) -> pandas.DataFrame
+
+   Creates a tour matrix of the pick nodes in the warehouse using the Floyd-Warshall algorithm.
+
+
+.. py:function:: predecessor_matrix_generator(G: networkx.Graph) -> dict[Any, Any] | dict[str, Any] | dict[str, str] | dict[bytes, bytes]
+
+   Creates a predecessor matrix of the pick nodes in the warehouse using the Floyd-Warshall algorithm.
+
+
+.. py:class:: GraphParameters
+
+   .. py:attribute:: n_aisles
+      :type:  int
+
+
+   .. py:attribute:: n_pick_locations
+      :type:  int
+
+
+   .. py:attribute:: dist_change_aisle
+      :type:  float
+
+
+   .. py:attribute:: dist_aisle_to_pick_location
+      :type:  float
+
+
+   .. py:attribute:: dist_pick_locations
+      :type:  float
+
+
+   .. py:attribute:: dist_start
+      :type:  float
+
+
+   .. py:attribute:: dist_end
+      :type:  float
+
+
+   .. py:attribute:: start_location
+      :type:  tuple[int, int]
+
+
+   .. py:attribute:: end_location
+      :type:  tuple[int, int]
+
+
+   .. py:attribute:: start_connection_point
+      :type:  tuple[int, int]
+
+
+   .. py:attribute:: end_connection_point
+      :type:  tuple[int, int]
+
+
+.. py:class:: GraphExplicitRepresentation
+
+   .. py:attribute:: vertices
+      :type:  List
+
+
+   .. py:attribute:: arcs
+      :type:  List
+
+
+.. py:class:: GraphGeneratorBase(G: networkx.Graph | None = None, **kwargs)
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:method:: populate_graph()
+
+
+   .. py:method:: render(plot: bool = True)
+
+
+.. py:class:: ExplicitGraphGenerator(vertices_coords: dict, arcs: List, G: networkx.Graph | None = None, **kwargs)
+
+   Bases: :py:obj:`GraphGeneratorBase`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:attribute:: vertices_coords
+
+
+   .. py:attribute:: arcs
+
+
+   .. py:method:: populate_graph()
+
+
+   .. py:method:: render(plot: bool = True, out_name=False, dpi=700, font_size=5, node_size=50, node_color='lightblue') -> None
+
+
+.. py:class:: ShelfStorageGraphGenerator(n_aisles: int, n_pick_locations: int, dist_aisle: float, dist_pick_locations: float, dist_aisle_location: float, dist_start: float, dist_end: float, start_location: tuple[int, int] = (0, 0), end_location: tuple[int, int] = (-1, 0), start_connection_point: tuple[int, int] = (1, 0), end_connection_point: tuple[int, int] = (1, 0), G: networkx.Graph | None = None, reverse_pick_nodes: bool = None, **kwargs)
+
+   Bases: :py:obj:`GraphGeneratorBase`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:attribute:: n_aisles
+
+
+   .. py:attribute:: n_pick_locations
+
+
+   .. py:attribute:: dist_aisle
+
+
+   .. py:attribute:: dist_pick_locations
+
+
+   .. py:attribute:: dist_aisle_location
+
+
+   .. py:attribute:: dist_start
+
+
+   .. py:attribute:: dist_end
+
+
+   .. py:attribute:: end_location
+
+
+   .. py:attribute:: start_location
+      :value: (0, 0)
+
+
+
+   .. py:attribute:: start_connection_point
+      :value: (1, 0)
+
+
+
+   .. py:attribute:: end_connection_point
+      :value: (1, 0)
+
+
+
+   .. py:attribute:: reverse_pick_nodes
+      :value: None
+
+
+
+   .. py:method:: populate_graph()
+
+
+   .. py:method:: render(plot: bool = True, out_name=False, dpi=700, font_size=5, node_size=50, node_color='lightblue') -> None
+
+
+.. py:class:: MultiBlockShelfStorageGraphGenerator(n_aisles: int, n_pick_locations: int, dist_aisle: float, dist_pick_locations: float, dist_aisle_location: float, dist_start: float, dist_end: float, start_location: tuple[int, int] = (0, 0), end_location: tuple[int, int] = (-1, 0), start_connection_point: tuple[int, int] = (1, 0), end_connection_point: tuple[int, int] = (1, 0), G: networkx.Graph | None = None, reverse_pick_nodes: bool = None, n_blocks: int = 1, dist_between_blocks: float | None = None, block_gap_rows: int = 0, **kwargs)
+
+   Bases: :py:obj:`GraphGeneratorBase`
+
+
+   Helper class that provides a standard way to create an ABC using
+   inheritance.
+
+
+   .. py:attribute:: n_aisles
+
+
+   .. py:attribute:: n_pick_locations
+
+
+   .. py:attribute:: dist_aisle
+
+
+   .. py:attribute:: dist_pick_locations
+
+
+   .. py:attribute:: dist_aisle_location
+
+
+   .. py:attribute:: dist_start
+
+
+   .. py:attribute:: dist_end
+
+
+   .. py:attribute:: end_location
+
+
+   .. py:attribute:: start_location
+      :value: (0, 0)
+
+
+
+   .. py:attribute:: start_connection_point
+      :value: (1, 0)
+
+
+
+   .. py:attribute:: end_connection_point
+      :value: (1, 0)
+
+
+
+   .. py:attribute:: reverse_pick_nodes
+      :value: None
+
+
+
+   .. py:attribute:: n_blocks
+
+
+   .. py:attribute:: dist_between_blocks
+
+
+   .. py:attribute:: block_gap_rows
+      :value: 0
+
+
+
+   .. py:method:: populate_graph()
+
+
+   .. py:method:: render(plot: bool = True, out_name=False, dpi=700, font_size=5, node_size=50, node_color='lightblue') -> None
+
+

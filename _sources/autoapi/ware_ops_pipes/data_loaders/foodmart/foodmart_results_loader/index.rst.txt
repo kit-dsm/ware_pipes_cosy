@@ -1,0 +1,32 @@
+ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader
+============================================================
+
+.. py:module:: ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.foodmart.foodmart_results_loader.FoodmartResultsLoader
+
+
+Module Contents
+---------------
+
+.. py:class:: FoodmartResultsLoader(data_dir: str | pathlib.Path)
+
+   Bases: :py:obj:`ware_ops_pipes.data_loaders.base_data_loader.DataLoader`
+
+
+   Small loader contract owned by the benchmark project.
+
+   ``ware_ops_algos`` intentionally stopped shipping data loaders.  Keeping the
+   contract here prevents benchmark I/O from being coupled to that package's
+   internal layout.
+
+
+   .. py:method:: load(instance_set: str) -> pandas.DataFrame
+
+

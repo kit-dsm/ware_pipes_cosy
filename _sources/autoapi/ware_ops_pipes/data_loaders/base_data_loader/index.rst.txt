@@ -1,0 +1,43 @@
+ware_ops_pipes.data_loaders.base_data_loader
+============================================
+
+.. py:module:: ware_ops_pipes.data_loaders.base_data_loader
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   ware_ops_pipes.data_loaders.base_data_loader.DataLoader
+
+
+Module Contents
+---------------
+
+.. py:class:: DataLoader(data_dir: str | pathlib.Path)
+
+   Bases: :py:obj:`abc.ABC`
+
+
+   Small loader contract owned by the benchmark project.
+
+   ``ware_ops_algos`` intentionally stopped shipping data loaders.  Keeping the
+   contract here prevents benchmark I/O from being coupled to that package's
+   internal layout.
+
+
+   .. py:attribute:: data_dir
+
+
+   .. py:attribute:: cache_path
+      :type:  pathlib.Path | None
+      :value: None
+
+
+
+   .. py:method:: load(*args, **kwargs) -> Any
+      :abstractmethod:
+
+
+

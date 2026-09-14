@@ -1,0 +1,82 @@
+batching.configured_local_search
+================================
+
+.. py:module:: batching.configured_local_search
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   batching.configured_local_search.ConfiguredLocalSearchBatching
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   batching.configured_local_search.make_configured_local_search_component
+
+
+Module Contents
+---------------
+
+.. py:class:: ConfiguredLocalSearchBatching(*args, **kwargs)
+
+   Bases: :py:obj:`ware_ops_pipes.pipelines.templates.cosy_template.MultiOrderBatching`
+
+
+   Base task for CoSy-Luigi benchmark pipelines.
+
+   Important:
+   Do not use self.task_id in output paths. With CoSy-Luigi, task_id may include
+   generated target information, which can recursively inject absolute paths into
+   filenames, especially on Windows.
+
+
+   .. py:attribute:: abstract
+      :value: True
+
+
+
+   .. py:attribute:: algo_cls
+
+
+   .. py:attribute:: algorithm_card
+      :value: None
+
+
+
+   .. py:attribute:: routing_class
+      :value: None
+
+
+
+   .. py:attribute:: start_batching_cls
+      :value: None
+
+
+
+   .. py:method:: implementation_config() -> dict
+
+
+   .. py:method:: config_fingerprint_payload() -> dict
+
+      Semantic configuration of this component.
+
+      Override this only for configured components, for example:
+      LocalSearchBatching with a specific seed heuristic, routing evaluator,
+      neighborhood, random seed, or iteration limit.
+
+      Do not include upstream inputs here. Upstream dependencies are handled
+      by chain_fingerprint().
+
+
+
+   .. py:method:: get_inited_batcher()
+
+
+.. py:function:: make_configured_local_search_component(card)
+
