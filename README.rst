@@ -135,6 +135,56 @@ Experiment results are saved to ``experiments/output/``.
 Use the Jupyter notebook in ``experiments/evaluation/result_evaluation.ipynb`` to analyze.
 We provide a pickled dataframe of the results from the paper which are stored in ``experiments/evaluation/df_results.pkl``.
 
+Benchmark sampling and publication
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Automated runs use the checked-in cohort in
+``experiments/benchmark_samples.json``. The first 20 entries of every set form
+the fast cohort and are a strict subset of the 100-instance standard cohort.
+The cohort covers filename factor levels and configuration families before
+adding deterministic, hash-selected replicates. This avoids alphabetical
+``first 100`` bias while keeping comparisons and Luigi cache placement stable
+across algorithm revisions.
+
+Regenerate the cohort only when the experiment design or instance inventory is
+intentionally changed:
+
+.. code-block:: bash
+
+   uv run python experiments/benchmark_sampling.py \
+     --output experiments/benchmark_samples.json
+
+After committing and pushing the workflow and cohort, run a small publication
+check first:
+
+.. code-block:: bash
+
+   gh workflow run run_bench_on_change.yml --ref main \
+     -f instance_set=FoodmartDataTest \
+     -f sample_size=20 \
+     -f update_cache=true \
+     -f deploy_site=true
+   gh run watch
+
+Then publish the standard production cohort:
+
+.. code-block:: bash
+
+   gh workflow run run_bench_on_change.yml --ref main \
+     -f instance_set=all \
+     -f sample_size=100 \
+     -f update_cache=true \
+     -f deploy_site=true
+   gh run watch
+
+The collector restores the previously published result dataframe before
+merging new rows, so publishing one set does not remove results for other sets.
+Cache assets are keyed by the cohort-file hash. After all selected shards
+succeed, superseded assets are removed only for those completed sets, including
+the corresponding assets from the legacy ``cache`` release. The rolling
+``benchmark-results.tar.gz`` asset is replaced only after the result dataframe
+and website data have both been built successfully.
+
 Citation
 ========
 

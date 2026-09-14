@@ -6,7 +6,7 @@ from typing import Any, Dict
 import networkx as nx
 from scipy.sparse.csgraph import floyd_warshall
 
-from ware_ops_algos.data_loaders.base_data_loader import DataLoader
+from ware_ops_pipes.data_loaders.base_data_loader import DataLoader
 from ware_ops_algos.domain_models import (
     Article,
     ArticleType,
@@ -83,7 +83,7 @@ class FoodmartLoader(DataLoader):
         }
 
     def build_layout(self, parsed: Dict[str, Any]) -> LayoutData:
-        from ware_ops_algos.data_loaders.generators import (
+        from ware_ops_algos.domain_models.layout.graph_generators import (
             ExplicitGraphGenerator,
             distance_matrix_generator_from_shortest_paths,
         )
@@ -455,7 +455,7 @@ class FoodmartLoader(DataLoader):
                 vertices_coords[idx] = (x, y, node_type)
 
             except (ValueError, IndexError) as exc:
-                print(f"Warning: Error parsing vertex line: {line} — {exc}")
+                print(f"Warning: Error parsing vertex line: {line} - {exc}")
 
         for article_id, location_id in sku_entries:
             x, y, _ = vertices_coords.get(location_id, (0, 0, ""))

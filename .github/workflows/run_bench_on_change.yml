@@ -24,6 +24,15 @@ on:
           - KrisLargeData
           - all
 
+      sample_size:
+        description: "Representative instances per set"
+        required: true
+        default: "20"
+        type: choice
+        options:
+          - "20"
+          - "100"
+
       update_cache:
         description: "Upload updated Luigi cache"
         required: true
@@ -51,11 +60,58 @@ jobs:
 
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      instance_sets: ${{ steps.matrix.outputs.instance_sets }}
+      sample_id: ${{ steps.sample.outputs.id }}
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Resolve the upstream algorithm revision once
+        env:
+          ALGOS_SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          if [ -n "$ALGOS_SHA" ]; then
+            uv add --no-sync --rev "$ALGOS_SHA" \
+              "git+https://github.com/kit-dsm/ware_ops_algos.git"
+          else
+            uv lock --upgrade-package ware_ops_algos
+          fi
+
+      - name: Share the resolved lockfile with all jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-lock
+          path: |
+            pyproject.toml
+            uv.lock
+          retention-days: 1
+          compression-level: 0
+
+      - name: Ensure cache release exists
+        if: ${{ github.event_name == 'repository_dispatch' || inputs.update_cache }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view benchmark-cache --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+          gh release create benchmark-cache \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Benchmark cache" \
+            --notes "Rolling cohort-versioned Luigi cache. Managed by the benchmark workflow."
+
+      - name: Identify benchmark cohort
+        id: sample
+        run: echo "id=$(sha256sum experiments/benchmark_samples.json | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - id: matrix
         env:
           INSTANCE_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.instance_set || 'all' }}
+          SAMPLE_SIZE: ${{ github.event_name == 'workflow_dispatch' && inputs.sample_size || '100' }}
         run: |
           python - <<'PY'
           import json
@@ -78,71 +134,114 @@ jobs:
               {"set": "FoodmartDataTest", "runner": "foodmart_test"},
           ]
 
+          manual_only_sets = [
+              {"set": "KrisLargeData", "runner": "ibrsp"},
+          ]
+
           selected = os.environ["INSTANCE_SET"]
-          selectable_sets = production_sets + test_sets
+          sample_size = int(os.environ["SAMPLE_SIZE"])
+          selectable_sets = production_sets + test_sets + manual_only_sets
 
           if selected == "all":
-              matrix = production_sets
+              selected_sets = production_sets
           else:
-              matrix = [x for x in selectable_sets if x["set"] == selected]
+              selected_sets = [x for x in selectable_sets if x["set"] == selected]
 
-          if not matrix:
+          if not selected_sets:
               raise SystemExit(f"Unknown instance set: {selected}")
+
+          # Keep approximately ten selected instances in each job. The fixed
+          # cohort makes these shards comparable across algorithm revisions.
+          matrix = []
+          for item in selected_sets:
+              shard_count = (
+                  1
+                  if item["runner"] == "foodmart_test"
+                  else max(1, (sample_size + 9) // 10)
+              )
+              for shard_index in range(shard_count):
+                  matrix.append({
+                      **item,
+                      "shard": shard_index,
+                      "shards": shard_count,
+                  })
 
           print(json.dumps(matrix, indent=2))
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write("matrix=" + json.dumps(matrix) + "\n")
+              f.write(
+                  "instance_sets="
+                  + json.dumps([item["set"] for item in selected_sets])
+                  + "\n"
+              )
           PY
 
   benchmark:
     needs: prepare
 
     runs-on: ubuntu-latest
+    timeout-minutes: 330
 
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 20
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download resolved lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-lock
+          path: .
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: Install project
-        run: |
-          uv lock --upgrade-package ware_ops_algos
-          uv sync
+        run: uv sync --frozen --no-dev
 
       - name: Restore Luigi cache
         env:
           SET_NAME: ${{ matrix.set }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ matrix.shards }}
+          SAMPLE_ID: ${{ needs.prepare.outputs.sample_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p experiments/output cache_in
 
+          SHARD_ID="${SHARD_INDEX}-of-${SHARD_COUNT}"
+
+          CACHE_NAME="cache__${SET_NAME}__${SAMPLE_ID}__${SHARD_ID}.tar.gz"
+
           gh release download benchmark-cache \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "cache-${SET_NAME}.tar.gz" \
+            --pattern "$CACHE_NAME" \
             --dir cache_in \
             --clobber || echo "cold cache for ${SET_NAME}"
 
-          if [ -f "cache_in/cache-${SET_NAME}.tar.gz" ]; then
-            tar xzf "cache_in/cache-${SET_NAME}.tar.gz" -C experiments/output
+          if [ -f "cache_in/${CACHE_NAME}" ]; then
+            tar xzf "cache_in/${CACHE_NAME}" -C experiments/output
           fi
 
       - name: Run benchmark shard
         env:
           SET_NAME: ${{ matrix.set }}
           RUNNER_KIND: ${{ matrix.runner }}
+          BENCHMARK_SHARD_INDEX: ${{ matrix.shard }}
+          BENCHMARK_SHARD_COUNT: ${{ matrix.shards }}
+          BENCHMARK_SAMPLE_SIZE: ${{ github.event_name == 'workflow_dispatch' && inputs.sample_size || '100' }}
+          BENCHMARK_REQUIRE_SAMPLE_MANIFEST: "true"
+          LUIGI_WORKERS: "2"
         run: |
           case "$RUNNER_KIND" in
             foodmart)
@@ -170,6 +269,9 @@ jobs:
       - name: Pack updated Luigi cache shard
         env:
           SET_NAME: ${{ matrix.set }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ matrix.shards }}
+          SAMPLE_ID: ${{ needs.prepare.outputs.sample_id }}
         run: |
           items=("$SET_NAME")
 
@@ -177,58 +279,88 @@ jobs:
             items+=("_data_cache")
           fi
 
-          tar czf "cache-${SET_NAME}.tar.gz" -C experiments/output "${items[@]}"
+          SHARD_ID="${SHARD_INDEX}-of-${SHARD_COUNT}"
+          CACHE_NAME="cache__${SET_NAME}__${SAMPLE_ID}__${SHARD_ID}.tar.gz"
+          tar -I 'gzip -1' -cf "$CACHE_NAME" \
+            -C experiments/output "${items[@]}"
 
       - name: Upload updated Luigi cache shard
         if: ${{ github.event_name == 'repository_dispatch' || inputs.update_cache }}
         env:
           SET_NAME: ${{ matrix.set }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ matrix.shards }}
+          SAMPLE_ID: ${{ needs.prepare.outputs.sample_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view benchmark-cache --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-          gh release create benchmark-cache \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Benchmark cache" \
-            --notes "Rolling Luigi cache. Do not delete."
+          SHARD_ID="${SHARD_INDEX}-of-${SHARD_COUNT}"
+          CACHE_NAME="cache__${SET_NAME}__${SAMPLE_ID}__${SHARD_ID}.tar.gz"
 
           gh release upload benchmark-cache \
-            "cache-${SET_NAME}.tar.gz" \
+            "$CACHE_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
       - name: Pack output shard for collector
         env:
           SET_NAME: ${{ matrix.set }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ matrix.shards }}
         run: |
-          tar czf "output-${SET_NAME}.tar.gz" -C experiments/output "$SET_NAME"
+          SHARD_ID="${SHARD_INDEX}-of-${SHARD_COUNT}"
+          tar -I 'gzip -1' -cf "output-${SET_NAME}-${SHARD_ID}.tar.gz" \
+            -C experiments/output "$SET_NAME"
 
       - name: Upload output shard artifact
         uses: actions/upload-artifact@v4
         with:
-          name: output-${{ matrix.set }}
-          path: output-${{ matrix.set }}.tar.gz
+          name: output-${{ matrix.set }}-${{ matrix.shard }}
+          path: output-${{ matrix.set }}-${{ matrix.shard }}-of-${{ matrix.shards }}.tar.gz
           retention-days: 7
+          compression-level: 0
 
   build-site:
-    needs: benchmark
+    needs: [prepare, benchmark]
 
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download resolved lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-lock
+          path: .
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: Install project
+        run: uv sync --frozen --extra eval --no-dev
+
+      - name: Restore previously published result history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          uv lock --upgrade-package ware_ops_algos
-          uv sync --extra eval
+          mkdir -p previous-results/download previous-results/extracted
+          gh release download benchmark-results \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "benchmark-results.tar.gz" \
+            --dir previous-results/download \
+            --clobber || echo "no previous benchmark results"
+
+          if [ -f previous-results/download/benchmark-results.tar.gz ]; then
+            tar xzf previous-results/download/benchmark-results.tar.gz \
+              -C previous-results/extracted
+            cp previous-results/extracted/df_results.pkl \
+              experiments/evaluation/df_results.pkl
+          fi
 
       - name: Download output shards
         uses: actions/download-artifact@v4
@@ -252,7 +384,8 @@ jobs:
           mkdir -p benchmark-results/data
           
           cp experiments/evaluation/df_results.pkl benchmark-results/df_results.pkl
-          cp -r experiments/evaluation/website/site/data benchmark-results/data
+          cp -r experiments/evaluation/website/site/data/. benchmark-results/data/
+          cp experiments/benchmark_samples.json benchmark-results/benchmark_samples.json
           
           tar czf benchmark-results.tar.gz -C benchmark-results .
 
@@ -277,6 +410,26 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
+      - name: Prune superseded cache assets for completed sets
+        if: ${{ github.event_name == 'repository_dispatch' || inputs.update_cache }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INSTANCE_SETS: ${{ needs.prepare.outputs.instance_sets }}
+          SAMPLE_ID: ${{ needs.prepare.outputs.sample_id }}
+        run: |
+          uv run python experiments/prune_release_assets.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --sample-id "$SAMPLE_ID" \
+            --instance-sets-json "$INSTANCE_SETS"
+
+          uv run python experiments/prune_release_assets.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --release cache \
+            --sample-id "$SAMPLE_ID" \
+            --instance-sets-json "$INSTANCE_SETS" \
+            --missing-ok
+
       - name: Upload Pages artifact
         if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         uses: actions/upload-pages-artifact@v3
@@ -288,6 +441,10 @@ jobs:
     if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
 
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: benchmark-pages
+      cancel-in-progress: true
 
     environment:
       name: github-pages

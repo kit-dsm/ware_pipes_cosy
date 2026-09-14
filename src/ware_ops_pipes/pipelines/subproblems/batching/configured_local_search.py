@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ware_ops_algos.algorithms.batching.batching import LocalSearchBatching
+from ware_ops_algos.algorithms import LocalSearchBatching
+from ware_ops_algos.algorithms.batching.component_registry import NEIGHBORHOODS
 from ware_ops_algos.domain_models import Articles, LayoutData, Resources
 
 from ware_ops_pipes.pipelines.io_helpers import load_pickle
@@ -70,6 +71,10 @@ class ConfiguredLocalSearchBatching(MultiOrderBatching):
             routing_class=self.routing_class,
             routing_class_kwargs=routing_kwargs,
             start_batching_class=self.start_batching_cls,
+            neighborhood_classes=[
+                NEIGHBORHOODS["SHIFT"],
+                NEIGHBORHOODS["SWAP"],
+            ],
             time_limit=self.pipeline_params.time_limit_sec,
         )
 

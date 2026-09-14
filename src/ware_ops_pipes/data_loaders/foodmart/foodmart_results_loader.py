@@ -1,5 +1,5 @@
 import pandas as pd
-from ware_ops_algos.data_loaders.base_data_loader import DataLoader
+from ware_ops_pipes.data_loaders.base_data_loader import DataLoader
 
 
 class FoodmartResultsLoader(DataLoader):

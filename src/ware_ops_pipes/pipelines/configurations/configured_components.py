@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import ware_ops_algos.algorithms as algo_module
+from ware_ops_pipes.pipelines.resolve_algo_class_names import resolve_algorithm_class
 
 
 _GENERATED_CLASSES = {}
@@ -9,7 +9,7 @@ _GENERATED_CLASSES = {}
 def resolve_card_value(value):
     if isinstance(value, dict):
         if "$class" in value:
-            return getattr(algo_module, value["$class"])
+            return resolve_algorithm_class(value["$class"])
         return {key: resolve_card_value(val) for key, val in value.items()}
 
     if isinstance(value, list):

@@ -6,7 +6,7 @@ from typing import Any
 import networkx as nx
 from scipy.sparse.csgraph import floyd_warshall
 
-from ware_ops_algos.data_loaders import DataLoader
+from ware_ops_pipes.data_loaders.base_data_loader import DataLoader
 from ware_ops_algos.domain_models import (
     Article,
     ArticleType,
@@ -83,7 +83,7 @@ class IBRSPLoader(DataLoader):
         }
 
     def build_layout(self, parsed: dict[str, Any]) -> LayoutData:
-        from ware_ops_algos.data_loaders.generators import (
+        from ware_ops_algos.domain_models.layout.graph_generators import (
             ExplicitGraphGenerator,
             distance_matrix_generator_from_shortest_paths,
         )
@@ -458,7 +458,7 @@ class IBRSPLoader(DataLoader):
                 vertices_coords[idx] = (x, y, node_type)
 
             except (ValueError, IndexError) as exc:
-                print(f"Warning: Error parsing vertex line: {line} — {exc}")
+                print(f"Warning: Error parsing vertex line: {line} - {exc}")
 
         aisle_x_positions = sorted(
             {

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ware-pipes-cosy"
 version = "0.1.0"
 description = "Benchnark suite for warehouse optimization."
-requires-python = ">=3.11"
+requires-python = "==3.13.*"
 dependencies = [
     "ware_ops_algos",
     "cosy-luigi",

@@ -25,15 +25,14 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: Install project
-        run: |
-          uv sync --extra eval
+        run: uv sync --frozen --extra eval --no-dev
 
       - name: Restore latest benchmark dataframe
         env:

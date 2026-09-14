@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from abc import abstractmethod, ABC
 from typing import Tuple
@@ -11,7 +12,6 @@ from cosy.maestro import Maestro
 from cosy_luigi import CoSyLuigiRepo
 from luigi.task_register import Register
 
-from ware_ops_algos.data_loaders import DataLoader
 from ware_ops_algos.domain_algo_mapper.domain_algo_mapper import DomainAlgorithmMapper
 from ware_ops_algos.domain_models.base_domain import BaseWarehouseDomain
 from ware_ops_algos.taxonomy.taxonomy import TAXONOMY
@@ -63,7 +63,7 @@ class PipelineRunner(ABC):
             cache_dir: Path,
             project_root: Path,
             data_card,
-            excluded: list = [],
+            excluded: list | None = None,
             max_pipelines: int = None,
             verbose: bool = True,
             cleanup: bool = True,
@@ -78,7 +78,6 @@ class PipelineRunner(ABC):
         self.cache_path: Path | None = None
 
         self.project_root = Path(project_root)
-        self.src_dir = project_root / "src" / "warehouse_algos"
         self.max_pipelines = max_pipelines
         self.verbose = verbose
         self.cleanup = cleanup
@@ -132,8 +131,8 @@ class PipelineRunner(ABC):
         if self.verbose:
             print(f"Loaded {len(self.algos)} model cards")
         self.data_card = data_card
-        self.excluded = excluded
-        self.loader: DataLoader | None = None
+        self.excluded = list(excluded or [])
+        self.loader = None
         self.ranker = ranker
 
     @abstractmethod
@@ -154,21 +153,84 @@ class PipelineRunner(ABC):
         """
         Run pipelines for all discovered instances
         """
-        instances = self.discover_instances()
+        instances = self._select_instances(self.discover_instances())
 
         print(f"\n{'=' * 80}")
         print(f"Instance Set: {self.instance_set_name}")
         print(f"Found {len(instances)} instances")
         print(f"{'=' * 80}\n")
+        failures = []
         for instance_name, file_paths in instances:
             try:
                 self.run_instance(instance_name, file_paths)
             except Exception as e:
-                print(f"❌ Error processing {instance_name}: {e}")
+                failures.append((instance_name, e))
+                print(f"ERROR: processing {instance_name}: {e}")
                 if self.verbose:
                     import traceback
                     traceback.print_exc()
         self.save_runtimes()
+        if failures:
+            names = ", ".join(name for name, _ in failures)
+            raise RuntimeError(
+                f"{len(failures)}/{len(instances)} benchmark instances failed: {names}"
+            ) from failures[0][1]
+
+    def _select_instances(self, instances):
+        """Select the fixed benchmark cohort, then its deterministic CI shard."""
+        instances = sorted(instances, key=lambda item: item[0])
+        instances_by_name = {name: (name, paths) for name, paths in instances}
+
+        sample_size = int(
+            os.environ.get(
+                "BENCHMARK_SAMPLE_SIZE",
+                os.environ.get("BENCHMARK_MAX_INSTANCES", "100"),
+            )
+        )
+        manifest_path = Path(
+            os.environ.get(
+                "BENCHMARK_SAMPLE_MANIFEST",
+                self.project_root / "experiments" / "benchmark_samples.json",
+            )
+        )
+        require_manifest = os.environ.get(
+            "BENCHMARK_REQUIRE_SAMPLE_MANIFEST", "false"
+        ).lower() in {"1", "true", "yes"}
+
+        if manifest_path.exists():
+            with manifest_path.open("r", encoding="utf-8") as file:
+                manifest = json.load(file)
+            selected_names = manifest.get("sets", {}).get(self.instance_set_name)
+            if selected_names is None:
+                if require_manifest:
+                    raise KeyError(
+                        f"No sample cohort for {self.instance_set_name} in {manifest_path}"
+                    )
+            else:
+                if sample_size > 0:
+                    selected_names = selected_names[:sample_size]
+                missing = [name for name in selected_names if name not in instances_by_name]
+                if missing:
+                    raise FileNotFoundError(
+                        f"Sample manifest references {len(missing)} missing instances "
+                        f"for {self.instance_set_name}: {missing[:5]}"
+                    )
+                instances = [instances_by_name[name] for name in selected_names]
+        elif require_manifest:
+            raise FileNotFoundError(f"Required sample manifest not found: {manifest_path}")
+        elif sample_size > 0:
+            # Local fallback only. CI requires the checked-in cohort so that
+            # algorithm versions are always compared on identical instances.
+            instances = instances[:sample_size]
+
+        shard_count = int(os.environ.get("BENCHMARK_SHARD_COUNT", "1"))
+        shard_index = int(os.environ.get("BENCHMARK_SHARD_INDEX", "0"))
+        if shard_count < 1 or not 0 <= shard_index < shard_count:
+            raise ValueError(
+                f"Invalid benchmark shard {shard_index}/{shard_count}; "
+                "expected 0 <= index < count"
+            )
+        return instances[shard_index::shard_count]
 
     def run_instance(self, instance_name: str, file_paths: list[Path]):
         """Run pipelines for a single instance"""
@@ -225,7 +287,7 @@ class PipelineRunner(ABC):
 
         t0 = time.perf_counter()
         if pipelines:
-            print(f"\n✓ Running {len(pipelines)} pipelines...\n")
+            print(f"\nRunning {len(pipelines)} pipelines...\n")
             luigi.interface.InterfaceLogging.setup(type('opts',
                                                         (),
                                                         {'background': None,
@@ -233,7 +295,15 @@ class PipelineRunner(ABC):
                                                          'logging_conf_file': None,
                                                          'log_level': 'CRITICAL'
                                                          }))
-            luigi.build(pipelines, local_scheduler=True)
+            workers = max(1, int(os.environ.get("LUIGI_WORKERS", "2")))
+            result = luigi.build(
+                pipelines,
+                local_scheduler=True,
+                workers=workers,
+                detailed_summary=True,
+            )
+            if not result.scheduling_succeeded:
+                raise RuntimeError("Luigi did not schedule all benchmark tasks successfully")
 
             self.create_ranking(instance_name, output_folder)
             # if self.cleanup:
@@ -242,7 +312,7 @@ class PipelineRunner(ABC):
             timings["total"] = sum(timings.values())
             self.pipeline_runtimes[instance_name] = timings
         else:
-            print("⚠ No valid pipelines found!")
+            print("WARNING: No valid pipelines found!")
 
     def _import_models(self, algos_applicable):
         """Import applicable model implementations"""
@@ -250,17 +320,17 @@ class PipelineRunner(ABC):
             algo_name = algo.algo_name
             if algo_name not in self.implementation_module:
                 if self.verbose:
-                    print(f"⚠ Unknown model: {algo_name}, skipping...")
+                    print(f"WARNING: Unknown model: {algo_name}, skipping...")
                 continue
 
             try:
                 module_path = self.implementation_module[algo_name]
                 cls = import_algo_class(algo_name, module_path)
                 if self.verbose:
-                    print(f"✅ {algo_name}")
+                    print(f"OK: {algo_name}")
             except Exception as e:
                 if self.verbose:
-                    print(f"❌ Failed to import {algo_name}: {e}")
+                    print(f"ERROR: Failed to import {algo_name}: {e}")
 
     def _filter_applicable_algorithms(self):
         """Return algorithm cards applicable to the current data card and present in the CoSy repo."""
@@ -278,19 +348,19 @@ class PipelineRunner(ABC):
         for algo in applicable:
             if algo.algo_name in self.excluded:
                 if self.verbose:
-                    print(f"⚠ Excluded by config: {algo.algo_name}")
+                    print(f"WARNING: Excluded by config: {algo.algo_name}")
                 continue
 
             if algo.algo_name not in self.repo_class_by_algo_name:
                 if self.verbose:
-                    print(f"⚠ No CoSy component registered for applicable algorithm: {algo.algo_name}")
+                    print(f"WARNING: No CoSy component registered for applicable algorithm: {algo.algo_name}")
                 continue
 
             final_algos.append(algo)
 
         if self.verbose:
             print(
-                f"✓ {len(final_algos)}/{len(self.algos)} algorithms usable "
+                f"OK: {len(final_algos)}/{len(self.algos)} algorithms usable "
                 f"after domain filtering and exclusions"
             )
 
@@ -312,7 +382,7 @@ class PipelineRunner(ABC):
 
         for algo in final_algos:
             # if self._is_configured_local_search_card(algo):
-            #     cls = make_configured_local_search_component(algo)
+            #    cls = make_configured_local_search_component(algo)
             # else:
             cls = self.repo_class_by_algo_name[algo.algo_name]
 
@@ -322,11 +392,13 @@ class PipelineRunner(ABC):
             model_classes.append(cls)
             seen.add(cls)
 
-        endpoint = ResultAggregationDueDate
-
         problem = self.data_card.problem_class
-        if "scheduling" in TAXONOMY[problem]["variables"]:
-            endpoint = ResultAggregationDueDate
+        problem_variables = TAXONOMY[problem]["variables"]
+        endpoint = (
+            ResultAggregationDueDate
+            if problem == "scheduling" or "scheduling" in problem_variables
+            else ResultAggregationDistance
+        )
 
         repo_classes = [
             LayoutLoader,
@@ -334,7 +406,7 @@ class PipelineRunner(ABC):
             AlgorithmRunConfig,
             SingleOrderBatching,
             *model_classes,
-            ResultAggregationDueDate
+            endpoint,
         ]
 
         if self.verbose:
@@ -356,7 +428,7 @@ class PipelineRunner(ABC):
             pipelines = list(islice(query, self.max_pipelines))
 
         if self.verbose and pipelines:
-            print(f"✓ Found {len(pipelines)} valid pipelines")
+            print(f"OK: Found {len(pipelines)} valid pipelines")
             for i, pipeline in enumerate(pipelines[:3], 1):
                 print(f"\nPipeline {i}:")
                 print(print_tree(pipeline))
@@ -370,12 +442,7 @@ class PipelineRunner(ABC):
     def _register_configured_local_search_components(self) -> None:
         """Extends the cosy repository by including configured local search variants"""
         for card in self.algos:
-            impl = card.implementation or {}
-
-            if "routing_class" not in impl:
-                continue
-
-            if "start_batching_class" not in impl:
+            if not self._is_configured_local_search_card(card):
                 continue
 
             self.repo_class_by_algo_name[card.algo_name] = (
@@ -410,7 +477,7 @@ class PipelineRunner(ABC):
                 return best
 
         except Exception as e:
-            print(f"⚠ Ranking error: {e}")
+            print(f"WARNING: Ranking error: {e}")
 
     def save_runtimes(self):
         output_folder = (
