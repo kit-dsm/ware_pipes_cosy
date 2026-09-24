@@ -34,35 +34,36 @@ jobs:
       - name: Install project
         run: uv sync --frozen --extra eval --no-dev
 
-      - name: Restore latest benchmark dataframe
+      - name: Download latest benchmark results
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p tmp_benchmark_results/download tmp_benchmark_results/extracted
-
           gh release download benchmark-results \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "benchmark-results.tar.gz" \
-            --dir tmp_benchmark_results/download \
-            --clobber
-
-          tar xzf tmp_benchmark_results/download/benchmark-results.tar.gz \
-            -C tmp_benchmark_results/extracted
-
-          mkdir -p experiments/evaluation
-
-          cp tmp_benchmark_results/extracted/df_results.pkl \
-            experiments/evaluation/df_results.pkl
+            --pattern "benchmark-results.parquet" \
+            --dir . \
+            --clobber || true
+          if [ -f benchmark-results.parquet ]; then
+            echo "RESULTS_INPUT=benchmark-results.parquet" >> "$GITHUB_ENV"
+          else
+            mkdir -p previous-results
+            gh release download benchmark-results \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "benchmark-results.tar.gz" \
+              --dir previous-results \
+              --clobber
+            tar xzf previous-results/benchmark-results.tar.gz \
+              -C previous-results
+            echo "RESULTS_INPUT=previous-results/df_results.pkl" >> "$GITHUB_ENV"
+          fi
 
       - name: Rebuild benchmark website data
-        run: |
-          rm -rf experiments/evaluation/website/site/data
-          uv run python experiments/evaluation/website/build_site_data.py
+        run: uv run --frozen python -m ware_ops_pipes.benchmark_results.cli build-site --input "$RESULTS_INPUT" --output site/data
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: experiments/evaluation/website/site
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment

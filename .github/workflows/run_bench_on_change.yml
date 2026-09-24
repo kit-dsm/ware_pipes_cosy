@@ -351,15 +351,20 @@ jobs:
           mkdir -p previous-results/download previous-results/extracted
           gh release download benchmark-results \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "benchmark-results.tar.gz" \
+            --pattern "benchmark-results.parquet" \
             --dir previous-results/download \
-            --clobber || echo "no previous benchmark results"
+            --clobber || true
 
+          if [ ! -f previous-results/download/benchmark-results.parquet ]; then
+            gh release download benchmark-results \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "benchmark-results.tar.gz" \
+              --dir previous-results/download \
+              --clobber || true
+          fi
           if [ -f previous-results/download/benchmark-results.tar.gz ]; then
             tar xzf previous-results/download/benchmark-results.tar.gz \
               -C previous-results/extracted
-            cp previous-results/extracted/df_results.pkl \
-              experiments/evaluation/df_results.pkl
           fi
 
       - name: Download output shards
@@ -374,23 +379,28 @@ jobs:
           find run_outputs -name "output-*.tar.gz" -print -exec tar xzf {} -C experiments/output \;
 
       - name: Build result dataframe
-        run: uv run python experiments/evaluation/build_results_cache.py
+        env:
+          INSTANCE_SETS: ${{ needs.prepare.outputs.instance_sets }}
+          SAMPLE_SIZE: ${{ github.event_name == 'workflow_dispatch' && inputs.sample_size || '100' }}
+        run: |
+          uv run --frozen python -m ware_ops_pipes.benchmark_results.cli build-results \
+            --instance-sets-json "$INSTANCE_SETS" \
+            --sample-size "$SAMPLE_SIZE" \
+            --history-parquet previous-results/download/benchmark-results.parquet \
+            --legacy-pickle previous-results/extracted/df_results.pkl \
+            --output benchmark-results.parquet
 
       - name: Build website data
-        run: uv run python experiments/evaluation/website/build_site_data.py
+        run: uv run --frozen python -m ware_ops_pipes.benchmark_results.cli build-site --input benchmark-results.parquet --output site/data
 
-      - name: Pack benchmark result asset
-        run: |
-          mkdir -p benchmark-results/data
-          
-          cp experiments/evaluation/df_results.pkl benchmark-results/df_results.pkl
-          cp -r experiments/evaluation/website/site/data/. benchmark-results/data/
-          cp experiments/benchmark_samples.json benchmark-results/benchmark_samples.json
-          
-          tar czf benchmark-results.tar.gz -C benchmark-results .
+      - name: Upload Parquet run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-parquet
+          path: benchmark-results.parquet
+          retention-days: 30
 
       - name: Ensure result release exists
-        if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -401,12 +411,11 @@ jobs:
             --notes "Latest benchmark result data."
 
       - name: Upload benchmark result asset
-        if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload benchmark-results \
-            benchmark-results.tar.gz \
+            benchmark-results.parquet \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -434,7 +443,7 @@ jobs:
         if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         uses: actions/upload-pages-artifact@v3
         with:
-          path: experiments/evaluation/website/site
+          path: site
 
   deploy-pages:
     needs: build-site
