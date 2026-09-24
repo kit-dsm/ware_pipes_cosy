@@ -27,7 +27,8 @@ eval = [
     "tqdm",
     "orjson",
     "seaborn",
-    "jinja2"
+    "jinja2",
+    "pyarrow"
 ]
 docs = [
     "sphinx",

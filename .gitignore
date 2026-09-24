@@ -103,8 +103,7 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
+# Benchmark dashboard source is tracked; generated JSON is ignored below.
 
 # mypy
 .mypy_cache/
@@ -119,3 +118,7 @@ outputs/
 
 /cls-luigi/
 experiments/output/
+benchmark-results.parquet
+/site/data/
+/experiments/evaluation/df_results.parquet
+/.uv-cache/

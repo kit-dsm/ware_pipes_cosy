@@ -100,40 +100,45 @@ The ``-e`` flag installs both packages in editable mode, allowing you to make ch
 Running Experiments
 -------------------
 
-Experiment scripts to reproduce the results in
-"Warehouse-Aware Design of Algorithmic Pipelines for Decision-Making in Warehouse Operations" are located in the ``experiments/`` folder:
-
-.. code-block:: text
-
-   experiments/
-   ├── evaluation/
-   │   ├── plots/
-   │   ├── df_results.pkl
-   │   ├── result_evaluation.ipynb
-   │   └── runtimes_evaluation.py
-   └── output/
-       ├── run_foodmart.py
-       ├── run_foodmart.sh
-       ├── run_hessler_irnich.py
-       ├── run_hessler_irnich.sh
-       ├── run_iopvrp.py
-       └── run_iopvrp.sh
+Experiment runners are in ``experiments/``. Their raw Luigi outputs are written
+to ``experiments/output/``. Result loading and preparation are available as
+``ware_ops_pipes.benchmark_results``; the dashboard's static files are in
+``site/``.
 
 **Running an experiment:**
 
 .. code-block:: bash
 
-   # Run directly with Python
-   python experiments/output/run_foodmart.py
-
-   # Or use the shell script
-   bash experiments/output/run_foodmart.sh
+   uv run python experiments/run_foodmart.py
 
 **Evaluating results:**
 
-Experiment results are saved to ``experiments/output/``.
-Use the Jupyter notebook in ``experiments/evaluation/result_evaluation.ipynb`` to analyze.
-We provide a pickled dataframe of the results from the paper which are stored in ``experiments/evaluation/df_results.pkl``.
+Download ``benchmark-results.parquet`` from the ``benchmark-results`` GitHub
+release for analysis. It contains one row per instance and pipeline version,
+including instance characteristics and loader timing when recorded by the
+benchmark. Older rows retain null values for fields that were not recorded.
+Nested algorithm configuration values are JSON strings.
+
+.. code-block:: bash
+
+   gh release download benchmark-results --pattern benchmark-results.parquet
+
+.. code-block:: python
+
+   from pathlib import Path
+   from ware_ops_pipes.benchmark_results import read_results
+
+   results = read_results(Path("benchmark-results.parquet"))
+   print(results.groupby("instance_set")["total_distance"].mean())
+
+The package also exposes ``load_new_results``, ``merge_results`` and
+``postprocess`` for analysis of local summaries. To rebuild the dashboard from
+the downloaded release asset, run:
+
+.. code-block:: bash
+
+   uv run --extra eval python -m ware_ops_pipes.benchmark_results.cli build-site \
+     --input benchmark-results.parquet --output site/data
 
 Benchmark sampling and publication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,8 +187,9 @@ merging new rows, so publishing one set does not remove results for other sets.
 Cache assets are keyed by the cohort-file hash. After all selected shards
 succeed, superseded assets are removed only for those completed sets, including
 the corresponding assets from the legacy ``cache`` release. The rolling
-``benchmark-results.tar.gz`` asset is replaced only after the result dataframe
-and website data have both been built successfully.
+``benchmark-results.parquet`` asset is replaced only after the result dataframe
+and website data have both been built successfully. The first publication after
+migration imports history from the earlier ``benchmark-results.tar.gz`` asset.
 
 Citation
 ========

@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from os.path import join as pjoin
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence, Callable
@@ -36,6 +37,7 @@ from ware_ops_algos.utils.fingerprint import fingerprint
 from ware_ops_pipes.pipelines.io_helpers import dump_pickle, load_pickle, dump_json
 from ware_ops_pipes.pipelines.pipeline_params import get_pipeline_params
 from ware_ops_pipes.synthesis.pipeline_provenance import collect_from_graph
+from ware_ops_pipes.benchmark_results.features import instance_features, loader_timing
 
 
 _SAFE_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -268,8 +270,11 @@ class LayoutLoader(CoSyLuigiTask):
 
     def run(self):
         loader = self._loader()
+        started = time.perf_counter()
         parsed = loader.parse_instance(Path(self.pipeline_params.instance_path))
+        parsed_at = time.perf_counter()
         layout = loader.build_layout(parsed)
+        built_at = time.perf_counter()
 
         target = self.output()["layout"]
         os.makedirs(os.path.dirname(target.path), exist_ok=True)
@@ -278,8 +283,19 @@ class LayoutLoader(CoSyLuigiTask):
         dump_pickle(tmp_path, layout)
         os.replace(tmp_path, target.path)
 
-def file_sha256(param):
-    pass
+        dump_json(f"{target.path}.timing.json", {
+            "instance_token": os.environ.get("BENCHMARK_INSTANCE_TOKEN"),
+            "parse_time": parsed_at - started,
+            "build_time": built_at - parsed_at,
+            "total_time": time.perf_counter() - started,
+        })
+
+def file_sha256(param: Path) -> str:
+    digest = hashlib.sha256()
+    with param.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class InstanceLoader(BaseComponent):
@@ -316,16 +332,25 @@ class InstanceLoader(BaseComponent):
 
     def run(self):
         loader = self._loader()
+        started = time.perf_counter()
         parsed = loader.parse_instance(Path(self.pipeline_params.instance_path))
+        parsed_at = time.perf_counter()
 
         layout = load_pickle(self.input()["layout_loader"]["layout"].path)
         domain = loader.build_domain_with_layout(parsed, layout)
+        built_at = time.perf_counter()
 
         self.dump_output_pickle("orders", domain.orders)
         self.dump_output_pickle("resources", domain.resources)
         self.dump_output_pickle("articles", domain.articles)
         self.dump_output_pickle("storage", domain.storage)
         self.dump_output_pickle("warehouse_info", domain.warehouse_info)
+        dump_json(f"{self.output()['orders'].path}.timing.json", {
+            "instance_token": os.environ.get("BENCHMARK_INSTANCE_TOKEN"),
+            "parse_time": parsed_at - started,
+            "build_time": built_at - parsed_at,
+            "total_time": time.perf_counter() - started,
+        })
 
 
 # ─────────────────────────── Item Assignment ────────────────────────────────
@@ -539,6 +564,22 @@ class AbstractResultAggregation(BaseComponent):
         summary["instance_set"] = self.pipeline_params.instance_set_name
         summary["pipeline_chain_fingerprint"] = self.chain_fingerprint()
 
+        instance_task = self._find_instance_task(self)
+        if instance_task is None:
+            raise RuntimeError("Result aggregation could not find its InstanceLoader")
+        outputs = instance_task.output()
+        summary["instance_features"] = instance_features(
+            load_pickle(outputs["orders"].path),
+            load_pickle(outputs["resources"].path),
+            load_pickle(outputs["storage"].path),
+            load_pickle(outputs["layout"].path),
+        )
+        summary["loader_timing"] = loader_timing(
+            outputs["layout"].path,
+            outputs["orders"].path,
+            os.environ.get("BENCHMARK_INSTANCE_TOKEN"),
+        )
+
         provenance_list = []
 
         for stage_name in ["item_assignment", "batching", "routing", "scheduling"]:
@@ -566,6 +607,22 @@ class AbstractResultAggregation(BaseComponent):
 
         summary["provenance"] = provenance_list
         return collected
+
+    @staticmethod
+    def _find_instance_task(task, visited=None):
+        from luigi.task import flatten
+
+        visited = set() if visited is None else visited
+        if id(task) in visited:
+            return None
+        visited.add(id(task))
+        if isinstance(task, InstanceLoader):
+            return task
+        for dependency in flatten(task.requires()):
+            found = AbstractResultAggregation._find_instance_task(dependency, visited)
+            if found is not None:
+                return found
+        return None
 
     @staticmethod
     def _compute_tour_summary_from_list(routing_sols: list[RoutingSolution]) -> dict:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from abc import abstractmethod, ABC
 from typing import Tuple
 from pathlib import Path
@@ -234,6 +235,7 @@ class PipelineRunner(ABC):
 
     def run_instance(self, instance_name: str, file_paths: list[Path]):
         """Run pipelines for a single instance"""
+        os.environ["BENCHMARK_INSTANCE_TOKEN"] = uuid.uuid4().hex
 
         print(f"\n{'=' * 80}")
         print(f"Processing: {instance_name}")
