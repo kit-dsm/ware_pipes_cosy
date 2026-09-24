@@ -393,8 +393,14 @@ jobs:
       - name: Build website data
         run: uv run --frozen python -m ware_ops_pipes.benchmark_results.cli build-site --input benchmark-results.parquet --output site/data
 
+      - name: Upload Parquet run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-parquet
+          path: benchmark-results.parquet
+          retention-days: 30
+
       - name: Ensure result release exists
-        if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -405,7 +411,6 @@ jobs:
             --notes "Latest benchmark result data."
 
       - name: Upload benchmark result asset
-        if: ${{ github.event_name == 'repository_dispatch' || inputs.deploy_site }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
